@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { useSyncedActions } from "@/lib/data-sync";
 import {
   Badge,
   Button,
@@ -19,8 +20,7 @@ const MEALS = ["breakfast", "lunch", "dinner", "snack"] as const;
 export default function MealPlanPage() {
   const recipes = useAppStore((s) => s.recipes);
   const mealPlan = useAppStore((s) => s.mealPlan);
-  const addMealPlan = useAppStore((s) => s.addMealPlan);
-  const removeMealPlan = useAppStore((s) => s.removeMealPlan);
+  const { addMealPlan, removeMealPlan } = useSyncedActions();
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [addContext, setAddContext] = useState<

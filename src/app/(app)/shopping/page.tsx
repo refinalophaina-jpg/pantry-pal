@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Sparkles, Trash2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { useSyncedActions } from "@/lib/data-sync";
 import {
   Badge,
   Button,
@@ -22,10 +23,13 @@ export default function ShoppingPage() {
   const deals = useAppStore((s) => s.deals);
   const recipes = useAppStore((s) => s.recipes);
   const pantry = useAppStore((s) => s.pantry);
-  const addShoppingItem = useAppStore((s) => s.addShoppingItem);
-  const toggleShoppingItem = useAppStore((s) => s.toggleShoppingItem);
-  const removeShoppingItem = useAppStore((s) => s.removeShoppingItem);
-  const clearCompleted = useAppStore((s) => s.clearCompleted);
+  const {
+    addShoppingItem,
+    toggleShoppingItem,
+    removeShoppingItem,
+    clearCompleted,
+    generateFromRecipe,
+  } = useSyncedActions();
 
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -231,9 +235,7 @@ export default function ShoppingPage() {
                   variant="secondary"
                   size="sm"
                   className="w-full justify-start"
-                  onClick={() =>
-                    useAppStore.getState().generateFromRecipe(r.id)
-                  }
+                  onClick={() => generateFromRecipe(r.id)}
                 >
                   {r.name}
                 </Button>

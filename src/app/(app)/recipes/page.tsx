@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChefHat, Clock, Filter, Plus, Sparkles } from "lucide-react";
 import { matchRecipeAgainstPantry, useAppStore } from "@/lib/store";
+import { useSyncedActions } from "@/lib/data-sync";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { CookMode } from "@/components/cook-mode";
@@ -24,8 +25,7 @@ export default function RecipesPage() {
   const recipes = useAppStore((s) => s.recipes);
   const pantry = useAppStore((s) => s.pantry);
   const equipment = useAppStore((s) => s.equipment);
-  const toggleEquipment = useAppStore((s) => s.toggleEquipment);
-  const generateFromRecipe = useAppStore((s) => s.generateFromRecipe);
+  const { toggleEquipment, generateFromRecipe } = useSyncedActions();
 
   const [q, setQ] = useState("");
   const [tag, setTag] = useState<string | null>(null);

@@ -11,6 +11,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { useSyncedActions } from "@/lib/data-sync";
 import {
   Badge,
   Button,
@@ -43,10 +44,12 @@ const CATEGORIES = [
 
 export default function PantryPage() {
   const pantry = useAppStore((s) => s.pantry);
-  const addPantryItem = useAppStore((s) => s.addPantryItem);
-  const updatePantryItem = useAppStore((s) => s.updatePantryItem);
-  const removePantryItem = useAppStore((s) => s.removePantryItem);
-  const consumeItem = useAppStore((s) => s.consumeItem);
+  const {
+    addPantryItem,
+    updatePantryItem,
+    removePantryItem,
+    consumeItem,
+  } = useSyncedActions();
   const { toast } = useToast();
 
   const [query, setQuery] = useState("");
@@ -235,7 +238,7 @@ function AddItemModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: ReturnType<typeof useAppStore.getState>["addPantryItem"];
+  onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -339,7 +342,7 @@ function ScanModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: ReturnType<typeof useAppStore.getState>["addPantryItem"];
+  onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
 }) {
   return (
     <Modal open={open} onClose={onClose} title="Scan barcode">
@@ -490,7 +493,7 @@ function ScanInner({
   onAdd,
 }: {
   onClose: () => void;
-  onAdd: ReturnType<typeof useAppStore.getState>["addPantryItem"];
+  onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
@@ -646,7 +649,7 @@ function PhotoModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: ReturnType<typeof useAppStore.getState>["addPantryItem"];
+  onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
 }) {
   const [detected, setDetected] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);

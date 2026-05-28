@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChefHat, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { Recipe } from "@/lib/types";
-import { useAppStore } from "@/lib/store";
+import { useSyncedActions } from "@/lib/data-sync";
 import { Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ export function CookMode({
   recipe: Recipe;
   onClose: () => void;
 }) {
-  const cookRecipe = useAppStore((s) => s.cookRecipe);
+  const { cookRecipe } = useSyncedActions();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
   const [done, setDone] = useState<boolean[]>(
@@ -28,14 +28,18 @@ export function CookMode({
     setDone((arr) => arr.map((v, idx) => (idx === i ? !v : v)));
   }
 
-  function finish() {
-    const result = cookRecipe(recipe.id);
-    if (!result.ok) {
-      toast(`Missing: ${result.missing.join(", ")}`, "warn");
-      return;
+  async function finish() {
+    try {
+      const result = await cookRecipe(recipe.id);
+      if (!result.ok) {
+        toast(`Missing: ${result.missing.join(", ")}`, "warn");
+        return;
+      }
+      toast(`${recipe.name} cooked — pantry updated.`);
+      onClose();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Cook failed", "warn");
     }
-    toast(`${recipe.name} cooked — pantry updated.`);
-    onClose();
   }
 
   return (

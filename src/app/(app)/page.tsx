@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
   ChefHat,
+  Flame,
   Leaf,
   ShoppingCart,
   Sparkles,
@@ -15,14 +16,46 @@ import { useAppStore, matchRecipeAgainstPantry } from "@/lib/store";
 import { Badge, Button, Card } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { ExpiryBanner } from "@/components/expiry-banner";
-import { daysUntil, expiryStatus, fmtDate } from "@/lib/utils";
+import { daysUntil, expiryStatus, fmtDate, todayISO } from "@/lib/utils";
+import { estimateRecipeNutrition } from "@/lib/nutrition";
 
 export default function DashboardPage() {
   const pantry = useAppStore((s) => s.pantry);
   const recipes = useAppStore((s) => s.recipes);
+  const savedRecipes = useAppStore((s) => s.savedRecipes);
   const equipment = useAppStore((s) => s.equipment);
   const usage = useAppStore((s) => s.usage);
   const deals = useAppStore((s) => s.deals);
+  const mealPlan = useAppStore((s) => s.mealPlan);
+
+  const today = todayISO();
+  const todayPlan = useMemo(
+    () => mealPlan.filter((m) => m.date === today),
+    [mealPlan, today],
+  );
+
+  const [todayCalories, setTodayCalories] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const all = [...savedRecipes, ...recipes];
+      let total = 0;
+      for (const entry of todayPlan) {
+        const recipe = all.find((r) => r.id === entry.recipeId);
+        if (!recipe) continue;
+        if (recipe.calories) {
+          total += recipe.calories;
+          continue;
+        }
+        const n = await estimateRecipeNutrition(recipe);
+        total += n.perServing.calories;
+      }
+      if (!cancelled) setTodayCalories(total > 0 ? Math.round(total) : 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [todayPlan, recipes, savedRecipes]);
 
   const expiringSoon = useMemo(
     () =>
@@ -63,7 +96,7 @@ export default function DashboardPage() {
 
       <ExpiryBanner />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <StatCard
           icon={<Leaf className="size-4" />}
           tone="fresh"
@@ -77,6 +110,19 @@ export default function DashboardPage() {
           label="Expiring ≤ 3d"
           value={expiringSoon.length}
           hint={expiringSoon.length > 0 ? "use these soon" : "all good"}
+        />
+        <StatCard
+          icon={<Flame className="size-4" />}
+          tone="info"
+          label="Today's plan"
+          value={
+            todayCalories === null
+              ? "…"
+              : todayCalories > 0
+                ? `${todayCalories} kcal`
+                : "—"
+          }
+          hint={`${todayPlan.length} meal${todayPlan.length === 1 ? "" : "s"}`}
         />
         <StatCard
           icon={<Wallet className="size-4" />}

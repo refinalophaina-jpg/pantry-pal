@@ -7,10 +7,12 @@ import {
   shoppingFromRow,
   mealPlanFromRow,
   usageFromRow,
+  savedRecipeFromRow,
   type PantryRow,
   type ShoppingRow,
   type MealPlanRow,
   type UsageRow,
+  type SavedRecipeRow,
 } from "./store";
 import { getSupabase } from "./supabase";
 import { useAuth } from "./auth-context";
@@ -23,6 +25,7 @@ export function DataSync({ children }: { children: ReactNode }) {
   const setShopping = useAppStore((s) => s._setShopping);
   const setMealPlan = useAppStore((s) => s._setMealPlan);
   const setUsage = useAppStore((s) => s._setUsage);
+  const setSavedRecipes = useAppStore((s) => s._setSavedRecipes);
   const upsertPantry = useAppStore((s) => s._upsertPantry);
   const removePantry = useAppStore((s) => s._removePantry);
   const upsertShopping = useAppStore((s) => s._upsertShopping);
@@ -30,6 +33,8 @@ export function DataSync({ children }: { children: ReactNode }) {
   const upsertMealPlan = useAppStore((s) => s._upsertMealPlan);
   const removeMealPlan = useAppStore((s) => s._removeMealPlan);
   const upsertUsage = useAppStore((s) => s._upsertUsage);
+  const upsertSavedRecipe = useAppStore((s) => s._upsertSavedRecipe);
+  const removeSavedRecipe = useAppStore((s) => s._removeSavedRecipe);
   const clearAll = useAppStore((s) => s._clearAllSynced);
 
   // Effective household id can come from auth or from local placeholder.
@@ -43,7 +48,7 @@ export function DataSync({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     (async () => {
-      const [p, s, m, u] = await Promise.all([
+      const [p, s, m, u, r] = await Promise.all([
         supabase
           .from("pantry_items")
           .select("*")
@@ -65,12 +70,19 @@ export function DataSync({ children }: { children: ReactNode }) {
           .eq("household_id", hid)
           .order("at", { ascending: false })
           .limit(200),
+        supabase
+          .from("saved_recipes")
+          .select("*")
+          .eq("household_id", hid)
+          .order("created_at", { ascending: false }),
       ]);
       if (cancelled) return;
       if (p.data) setPantry((p.data as PantryRow[]).map(pantryFromRow));
       if (s.data) setShopping((s.data as ShoppingRow[]).map(shoppingFromRow));
       if (m.data) setMealPlan((m.data as MealPlanRow[]).map(mealPlanFromRow));
       if (u.data) setUsage((u.data as UsageRow[]).map(usageFromRow));
+      if (r.data)
+        setSavedRecipes((r.data as SavedRecipeRow[]).map(savedRecipeFromRow));
     })();
 
     const channel = supabase
@@ -113,6 +125,18 @@ export function DataSync({ children }: { children: ReactNode }) {
         { event: "INSERT", schema: "public", table: "usage_events", filter: `household_id=eq.${hid}` },
         (payload) => upsertUsage(usageFromRow(payload.new as UsageRow)),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "saved_recipes", filter: `household_id=eq.${hid}` },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const id = (payload.old as { id: string }).id;
+            removeSavedRecipe(`saved-${id}`);
+          } else {
+            upsertSavedRecipe(savedRecipeFromRow(payload.new as SavedRecipeRow));
+          }
+        },
+      )
       .subscribe();
 
     return () => {
@@ -127,6 +151,7 @@ export function DataSync({ children }: { children: ReactNode }) {
     setShopping,
     setMealPlan,
     setUsage,
+    setSavedRecipes,
     upsertPantry,
     removePantry,
     upsertShopping,
@@ -134,6 +159,8 @@ export function DataSync({ children }: { children: ReactNode }) {
     upsertMealPlan,
     removeMealPlan,
     upsertUsage,
+    upsertSavedRecipe,
+    removeSavedRecipe,
     clearAll,
   ]);
 
@@ -177,6 +204,9 @@ export function useSyncedActions() {
     addMealPlan: (entry: Parameters<typeof store.addMealPlan>[0]) =>
       store.addMealPlan(entry, ctx),
     removeMealPlan: (id: string) => store.removeMealPlan(id, ctx),
+    saveRecipe: (recipe: Parameters<typeof store.saveRecipe>[0]) =>
+      store.saveRecipe(recipe, ctx),
+    unsaveRecipe: (savedId: string) => store.unsaveRecipe(savedId, ctx),
     toggleEquipment: store.toggleEquipment,
   };
 }

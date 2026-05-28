@@ -27,6 +27,7 @@ interface AppState {
   shopping: ShoppingItem[];
   mealPlan: MealPlanEntry[];
   usage: UsageEvent[];
+  savedRecipes: Recipe[];
 
   // Local-only / seeded from code
   recipes: Recipe[];
@@ -38,6 +39,7 @@ interface AppState {
   _setShopping: (items: ShoppingItem[]) => void;
   _setMealPlan: (items: MealPlanEntry[]) => void;
   _setUsage: (items: UsageEvent[]) => void;
+  _setSavedRecipes: (items: Recipe[]) => void;
   _upsertPantry: (item: PantryItem) => void;
   _removePantry: (id: string) => void;
   _upsertShopping: (item: ShoppingItem) => void;
@@ -45,6 +47,8 @@ interface AppState {
   _upsertMealPlan: (item: MealPlanEntry) => void;
   _removeMealPlan: (id: string) => void;
   _upsertUsage: (item: UsageEvent) => void;
+  _upsertSavedRecipe: (item: Recipe) => void;
+  _removeSavedRecipe: (id: string) => void;
   _clearAllSynced: () => void;
 
   // Mutators (these write through to Supabase when ctx is set)
@@ -83,6 +87,9 @@ interface AppState {
     ctx: SyncedActionsCtx,
   ) => Promise<void>;
   removeMealPlan: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
+
+  saveRecipe: (recipe: Recipe, ctx: SyncedActionsCtx) => Promise<string>;
+  unsaveRecipe: (savedId: string, ctx: SyncedActionsCtx) => Promise<void>;
 
   toggleEquipment: (name: string) => void;
 }
@@ -184,6 +191,56 @@ function usageFromRow(row: UsageRow): UsageEvent {
   };
 }
 
+interface SavedRecipeRow {
+  id: string;
+  household_id: string;
+  name: string;
+  description: string | null;
+  cuisine: string | null;
+  minutes: number | null;
+  difficulty: string | null;
+  servings: number | null;
+  equipment: string[] | null;
+  ingredients: Recipe["ingredients"] | null;
+  steps: string[] | null;
+  tags: string[] | null;
+  external_id: string | null;
+  image_url: string | null;
+  area: string | null;
+  source: string | null;
+  video: string | null;
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+}
+
+function savedRecipeFromRow(row: SavedRecipeRow): Recipe {
+  return {
+    id: `saved-${row.id}`,
+    savedId: row.id,
+    name: row.name,
+    description: row.description ?? "",
+    cuisine: row.cuisine ?? "Custom",
+    minutes: row.minutes ?? 30,
+    difficulty: (row.difficulty as Recipe["difficulty"]) ?? "easy",
+    servings: row.servings ?? 2,
+    equipment: row.equipment ?? [],
+    ingredients: row.ingredients ?? [],
+    steps: row.steps ?? [],
+    tags: row.tags ?? [],
+    externalId: row.external_id ?? undefined,
+    imageUrl: row.image_url ?? undefined,
+    area: row.area ?? undefined,
+    source: row.source ?? undefined,
+    video: row.video ?? undefined,
+    calories: row.calories ?? undefined,
+    proteinG: row.protein_g ? Number(row.protein_g) : undefined,
+    carbsG: row.carbs_g ? Number(row.carbs_g) : undefined,
+    fatG: row.fat_g ? Number(row.fat_g) : undefined,
+  };
+}
+
 // Store ------------------------------------------------------------
 export const useAppStore = create<AppState>()(
   persist(
@@ -192,6 +249,7 @@ export const useAppStore = create<AppState>()(
       shopping: [],
       mealPlan: [],
       usage: [],
+      savedRecipes: [],
 
       recipes: seedRecipes,
       equipment: seedEquipment,
@@ -201,6 +259,7 @@ export const useAppStore = create<AppState>()(
       _setShopping: (items) => set({ shopping: items }),
       _setMealPlan: (items) => set({ mealPlan: items }),
       _setUsage: (items) => set({ usage: items }),
+      _setSavedRecipes: (items) => set({ savedRecipes: items }),
       _upsertPantry: (item) =>
         set((s) => ({
           pantry: s.pantry.some((p) => p.id === item.id)
@@ -231,8 +290,24 @@ export const useAppStore = create<AppState>()(
             ? s.usage.map((p) => (p.id === item.id ? item : p))
             : [...s.usage, item],
         })),
+      _upsertSavedRecipe: (item) =>
+        set((s) => ({
+          savedRecipes: s.savedRecipes.some((p) => p.id === item.id)
+            ? s.savedRecipes.map((p) => (p.id === item.id ? item : p))
+            : [...s.savedRecipes, item],
+        })),
+      _removeSavedRecipe: (id) =>
+        set((s) => ({
+          savedRecipes: s.savedRecipes.filter((p) => p.id !== id),
+        })),
       _clearAllSynced: () =>
-        set({ pantry: [], shopping: [], mealPlan: [], usage: [] }),
+        set({
+          pantry: [],
+          shopping: [],
+          mealPlan: [],
+          usage: [],
+          savedRecipes: [],
+        }),
 
       addPantryItem: async (item, ctx) => {
         const { data, error } = await supa()
@@ -447,6 +522,50 @@ export const useAppStore = create<AppState>()(
         get()._removeMealPlan(id);
       },
 
+      saveRecipe: async (recipe, ctx) => {
+        const { data, error } = await supa()
+          .from("saved_recipes")
+          .insert({
+            household_id: ctx.householdId,
+            name: recipe.name,
+            description: recipe.description,
+            cuisine: recipe.cuisine,
+            minutes: recipe.minutes,
+            difficulty: recipe.difficulty,
+            servings: recipe.servings,
+            equipment: recipe.equipment,
+            ingredients: recipe.ingredients,
+            steps: recipe.steps,
+            tags: recipe.tags,
+            external_id: recipe.externalId ?? null,
+            image_url: recipe.imageUrl ?? null,
+            area: recipe.area ?? null,
+            source: recipe.source ?? null,
+            video: recipe.video ?? null,
+            calories: recipe.calories ?? null,
+            protein_g: recipe.proteinG ?? null,
+            carbs_g: recipe.carbsG ?? null,
+            fat_g: recipe.fatG ?? null,
+            created_by: ctx.userId,
+          })
+          .select()
+          .single();
+        if (error || !data) throw error ?? new Error("Save failed");
+        const saved = savedRecipeFromRow(data as SavedRecipeRow);
+        get()._upsertSavedRecipe(saved);
+        return saved.id;
+      },
+
+      unsaveRecipe: async (savedId, ctx) => {
+        const { error } = await supa()
+          .from("saved_recipes")
+          .delete()
+          .eq("id", savedId)
+          .eq("household_id", ctx.householdId);
+        if (error) throw error;
+        get()._removeSavedRecipe(savedId);
+      },
+
       toggleEquipment: (name) =>
         set((s) => ({
           equipment: s.equipment.some((e) => e.name === name)
@@ -505,8 +624,10 @@ export {
   shoppingFromRow,
   mealPlanFromRow,
   usageFromRow,
+  savedRecipeFromRow,
   type PantryRow,
   type ShoppingRow,
   type MealPlanRow,
   type UsageRow,
+  type SavedRecipeRow,
 };

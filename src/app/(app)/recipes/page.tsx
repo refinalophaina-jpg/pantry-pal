@@ -1,7 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChefHat, Clock, Filter, Plus, Sparkles } from "lucide-react";
+import Image from "next/image";
+import {
+  Bookmark,
+  BookmarkCheck,
+  ChefHat,
+  Clock,
+  Filter,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import { matchRecipeAgainstPantry, useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import { Badge, Button, Card, Input } from "@/components/ui";
@@ -22,7 +31,8 @@ const SUBSTITUTIONS: Record<string, string[]> = {
 };
 
 export default function RecipesPage() {
-  const recipes = useAppStore((s) => s.recipes);
+  const builtins = useAppStore((s) => s.recipes);
+  const saved = useAppStore((s) => s.savedRecipes);
   const pantry = useAppStore((s) => s.pantry);
   const equipment = useAppStore((s) => s.equipment);
   const { toggleEquipment, generateFromRecipe } = useSyncedActions();
@@ -31,7 +41,18 @@ export default function RecipesPage() {
   const [tag, setTag] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [cooking, setCooking] = useState<Recipe | null>(null);
+  const [scope, setScope] = useState<"all" | "saved">("all");
   const { toast } = useToast();
+
+  const recipes = useMemo(() => {
+    // Saved recipes first; then built-ins deduped by name match.
+    const savedNames = new Set(saved.map((r) => r.name.toLowerCase()));
+    if (scope === "saved") return saved;
+    return [
+      ...saved,
+      ...builtins.filter((r) => !savedNames.has(r.name.toLowerCase())),
+    ];
+  }, [builtins, saved, scope]);
 
   const ranked = useMemo(() => {
     return recipes
@@ -69,6 +90,22 @@ export default function RecipesPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <div className="flex gap-1 p-1 rounded-lg bg-[var(--bg)]">
+          <Button
+            size="sm"
+            variant={scope === "all" ? "primary" : "ghost"}
+            onClick={() => setScope("all")}
+          >
+            All
+          </Button>
+          <Button
+            size="sm"
+            variant={scope === "saved" ? "primary" : "ghost"}
+            onClick={() => setScope("saved")}
+          >
+            Saved ({saved.length})
+          </Button>
+        </div>
       </div>
 
       {showFilters && (
@@ -161,10 +198,35 @@ function RecipeCard({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <Card id={recipe.id} className="flex flex-col">
+    <Card id={recipe.id} className="flex flex-col p-0 overflow-hidden">
+      {recipe.imageUrl && (
+        <div className="relative aspect-[16/9] bg-[var(--bg)]">
+          <Image
+            src={recipe.imageUrl}
+            alt={recipe.name}
+            fill
+            sizes="(max-width: 768px) 100vw, 50vw"
+            className="object-cover"
+            unoptimized
+          />
+          {recipe.savedId && (
+            <div className="absolute top-2 right-2">
+              <Badge tone="info" className="bg-black/50 text-white border-0">
+                <BookmarkCheck className="size-3" /> Saved
+              </Badge>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="p-5 flex-1 flex flex-col">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="font-semibold text-lg">{recipe.name}</div>
+          <div className="font-semibold text-lg flex items-center gap-2">
+            {recipe.name}
+            {recipe.savedId && !recipe.imageUrl && (
+              <Bookmark className="size-3.5 text-[var(--accent-hover)]" />
+            )}
+          </div>
           <p className="text-sm text-[var(--text-muted)] mt-0.5">
             {recipe.description}
           </p>
@@ -277,6 +339,7 @@ function RecipeCard({
           </div>
         </div>
       )}
+      </div>
     </Card>
   );
 }

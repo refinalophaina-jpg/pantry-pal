@@ -49,6 +49,25 @@ export interface Recipe {
   }>;
   steps: string[];
   tags: string[];
+  // Optional enrichment (TheMealDB, custom, etc.)
+  imageUrl?: string;
+  area?: string;
+  source?: string;
+  video?: string;
+  externalId?: string;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+  savedId?: string; // present iff this recipe is in saved_recipes
+}
+
+export interface Nutrition {
+  calories: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+  fiberG?: number;
 }
 
 export interface ShoppingItem {

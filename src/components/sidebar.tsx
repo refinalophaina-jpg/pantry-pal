@@ -15,6 +15,7 @@ import {
   Users,
   Copy,
   Check,
+  Globe2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -24,7 +25,8 @@ import { useToast } from "@/components/toast";
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pantry", label: "Pantry", icon: Refrigerator },
-  { href: "/recipes", label: "Recipes", icon: ChefHat },
+  { href: "/recipes", label: "My Recipes", icon: ChefHat },
+  { href: "/explore", label: "Explore", icon: Globe2 },
   { href: "/meal-plan", label: "Meal Plan", icon: CalendarDays },
   { href: "/shopping", label: "Shopping", icon: ShoppingCart },
   { href: "/analytics", label: "Analytics", icon: TrendingUp },

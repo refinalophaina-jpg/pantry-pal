@@ -13,6 +13,7 @@ import {
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
+import { useMounted } from "@/lib/use-mounted";
 import { format, startOfWeek, addDays, parseISO } from "date-fns";
 
 const MEALS = ["breakfast", "lunch", "dinner", "snack"] as const;
@@ -27,11 +28,19 @@ export default function MealPlanPage() {
     null | { date: string; meal: (typeof MEALS)[number] }
   >(null);
 
+  // The week grid is computed from the current date, which differs between the
+  // static-export build and the client. Defer it to after mount so server HTML
+  // and the first client render agree (empty grid), then render the real week.
+  const mounted = useMounted();
+  const todayStr = mounted ? format(new Date(), "yyyy-MM-dd") : null;
+
   const weekStart = useMemo(() => {
+    if (!mounted) return null;
     return addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset * 7);
-  }, [weekOffset]);
+  }, [mounted, weekOffset]);
 
   const days = useMemo(() => {
+    if (!weekStart) return [];
     return Array.from({ length: 7 }, (_, i) => {
       const d = addDays(weekStart, i);
       return {
@@ -76,10 +85,20 @@ export default function MealPlanPage() {
       />
 
       <Card className="overflow-x-auto p-0">
+        {!mounted ? (
+          <div className="min-w-[800px] p-3 space-y-2">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div
+                key={i}
+                className="h-[72px] rounded-md bg-[var(--bg)] animate-pulse"
+              />
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-[100px_repeat(7,minmax(140px,1fr))] min-w-[800px]">
           <div className="p-3 text-xs text-[var(--text-muted)] border-b border-[var(--border)]" />
           {days.map((d) => {
-            const isToday = d.date === format(new Date(), "yyyy-MM-dd");
+            const isToday = d.date === todayStr;
             return (
               <div
                 key={d.date}
@@ -104,6 +123,7 @@ export default function MealPlanPage() {
             />
           ))}
         </div>
+        )}
       </Card>
 
       {mealPlan.length === 0 && (

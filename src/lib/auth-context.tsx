@@ -33,6 +33,28 @@ interface AuthState {
   refreshHousehold: () => Promise<void>;
 }
 
+/**
+ * Rejects if a Supabase call hasn't settled in `ms`, so a stalled request
+ * (expired-token refresh, dropped connection) surfaces as a visible error
+ * instead of an infinite "Working…" spinner.
+ */
+function withTimeout<T>(p: PromiseLike<T>, label: string, ms = 12000): Promise<T> {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              `${label} timed out after ${ms / 1000}s. Check your connection and try again.`,
+            ),
+          ),
+        ms,
+      ),
+    ),
+  ]);
+}
+
 const AuthCtx = createContext<AuthState | null>(null);
 
 export function useAuth(): AuthState {
@@ -127,14 +149,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const supabase = getSupabase();
       const user = session?.user;
       if (!user) return { error: "Not signed in" };
-      const { data, error } = await supabase
-        .from("households")
-        .insert({ name, created_by: user.id })
-        .select("id, name")
-        .single();
-      if (error || !data) return { error: error?.message ?? "Insert failed" };
-      setHousehold({ id: data.id, name: data.name, role: "owner" });
-      return {};
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from("households")
+            .insert({ name, created_by: user.id })
+            .select("id, name")
+            .single(),
+          "Creating household",
+        );
+        if (error || !data) return { error: error?.message ?? "Insert failed" };
+        setHousehold({ id: data.id, name: data.name, role: "owner" });
+        return {};
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Something went wrong" };
+      }
     },
     [session],
   );
@@ -142,13 +171,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const joinHousehold = useCallback(
     async (code: string) => {
       const supabase = getSupabase();
-      const { data, error } = await supabase.rpc("redeem_household_invite", {
-        p_code: code.trim().toUpperCase(),
-      });
-      if (error) return { error: error.message };
-      if (!data) return { error: "Invite invalid" };
-      if (session?.user) await loadHousehold(session.user.id);
-      return {};
+      try {
+        const { data, error } = await withTimeout(
+          supabase.rpc("redeem_household_invite", {
+            p_code: code.trim().toUpperCase(),
+          }),
+          "Joining household",
+        );
+        if (error) return { error: error.message };
+        if (!data) return { error: "Invite invalid" };
+        if (session?.user) await loadHousehold(session.user.id);
+        return {};
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Something went wrong" };
+      }
     },
     [session, loadHousehold],
   );

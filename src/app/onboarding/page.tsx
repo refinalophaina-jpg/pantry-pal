@@ -26,11 +26,18 @@ export default function OnboardingPage() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const r =
-      tab === "create" ? await createHousehold(name) : await joinHousehold(code);
-    setBusy(false);
-    if (r.error) setError(r.error);
-    else router.replace("/");
+    try {
+      const r =
+        tab === "create"
+          ? await createHousehold(name)
+          : await joinHousehold(code);
+      if (r.error) setError(r.error);
+      else router.replace("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

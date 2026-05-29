@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/page-header";
 import { ExpiryBanner } from "@/components/expiry-banner";
 import { daysUntil, expiryStatus, fmtDate, todayISO } from "@/lib/utils";
 import { estimateRecipeNutrition } from "@/lib/nutrition";
+import { useMounted } from "@/lib/use-mounted";
 
 export default function DashboardPage() {
   const pantry = useAppStore((s) => s.pantry);
@@ -28,9 +29,13 @@ export default function DashboardPage() {
   const deals = useAppStore((s) => s.deals);
   const mealPlan = useAppStore((s) => s.mealPlan);
 
-  const today = todayISO();
+  // todayISO() reads the wall clock, which differs between the static-export
+  // build and the client. Defer it to after mount so the first client render
+  // matches the server HTML (empty plan), then fills in once mounted.
+  const mounted = useMounted();
+  const today = mounted ? todayISO() : "";
   const todayPlan = useMemo(
-    () => mealPlan.filter((m) => m.date === today),
+    () => (today ? mealPlan.filter((m) => m.date === today) : []),
     [mealPlan, today],
   );
 

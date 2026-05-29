@@ -1,0 +1,14 @@
+-- Migration ...0002 (harden_function_grants) revoked EXECUTE on
+-- is_household_member from `authenticated`. But that helper is referenced inside
+-- the RLS USING/CHECK expressions on households, household_members, invites,
+-- pantry_items, shopping_items, meal_plan, usage_events and saved_recipes.
+--
+-- RLS policy expressions are evaluated as the querying role (authenticated), and
+-- SECURITY DEFINER only governs the privileges the function BODY runs with -- the
+-- *caller* still needs EXECUTE. With EXECUTE revoked, every policy that calls the
+-- function failed with "permission denied for function is_household_member",
+-- which blocked household creation and all table reads/writes.
+--
+-- The function only checks membership for the current auth.uid(), so granting
+-- EXECUTE to authenticated does not expose any other household's data.
+grant execute on function public.is_household_member(uuid) to authenticated;

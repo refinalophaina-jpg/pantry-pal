@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
+import { useAuth } from "@/lib/auth-context";
+import { getSupabase } from "@/lib/supabase";
 import {
   Badge,
   Button,
@@ -24,7 +26,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/components/toast";
 import { useAction } from "@/lib/use-action";
-import { expiryStatus } from "@/lib/utils";
+import { expiryStatus, uid } from "@/lib/utils";
 import type { PantryItem, StorageZone, UnitType } from "@/lib/types";
 
 const UNITS: UnitType[] = ["pcs", "g", "kg", "ml", "l", "tbsp", "tsp", "cup"];
@@ -776,89 +778,175 @@ function PhotoModal({
   onClose: () => void;
   onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
 }) {
-  const [detected, setDetected] = useState<string[]>([]);
+  const { household } = useAuth();
+  const [detected, setDetected] = useState<
+    Array<{ name: string; category: string; include: boolean }>
+  >([]);
   const [analyzing, setAnalyzing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  function fakeAnalyze(_file: File) {
+  async function analyze(file: File) {
     setAnalyzing(true);
-    setTimeout(() => {
-      setDetected([
-        "Tomatoes",
-        "Basil",
-        "Mozzarella",
-        "Olive oil",
-        "Garlic",
-      ]);
+    setError(null);
+    setDetected([]);
+    try {
+      const supabase = getSupabase();
+      const base64 = await fileToBase64(file);
+      const mediaType = file.type || "image/jpeg";
+
+      // Store the photo (best-effort, household-scoped) — recognition doesn't
+      // depend on the upload succeeding.
+      if (household) {
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        void supabase.storage
+          .from("pantry-photos")
+          .upload(`${household.id}/${uid()}.${ext}`, file, {
+            contentType: mediaType,
+          });
+      }
+
+      const { data, error: fnError } = await supabase.functions.invoke(
+        "recognize-pantry",
+        { body: { imageBase64: base64, mediaType } },
+      );
+      if (fnError) throw new Error(fnError.message || "Recognition failed.");
+      if (data?.error) throw new Error(data.error);
+
+      const items = (data?.items ?? []) as Array<{
+        name: string;
+        category: string;
+      }>;
+      if (items.length === 0) {
+        setError("No food items detected — try a clearer, closer photo.");
+      } else {
+        setDetected(items.map((i) => ({ ...i, include: true })));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't analyze the photo.");
+    } finally {
       setAnalyzing(false);
-    }, 1200);
+    }
+  }
+
+  function update(idx: number, patch: Partial<(typeof detected)[number]>) {
+    setDetected((arr) => arr.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
   }
 
   async function commit() {
+    const chosen = detected.filter((d) => d.include && d.name.trim());
+    if (chosen.length === 0) return;
+    setSaving(true);
     try {
-      // await sequentially so each insert that lands is reflected, and a
-      // failure stops with a clear message rather than a silent partial add.
-      for (const name of detected) {
+      for (const it of chosen) {
         await onAdd({
-          name,
-          category: "Produce",
+          name: it.name.trim(),
+          category: it.category,
           quantity: 1,
           unit: "pcs",
           zone: "fridge",
         });
       }
-      toast(`Added ${detected.length} items from photo.`);
+      toast(`Added ${chosen.length} item${chosen.length === 1 ? "" : "s"} from photo.`);
       setDetected([]);
       onClose();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Couldn't add items.", "warn");
+    } finally {
+      setSaving(false);
     }
   }
 
+  const includedCount = detected.filter((d) => d.include).length;
+
   return (
     <Modal open={open} onClose={onClose} title="Photo → ingredients">
-      <p className="text-sm text-[var(--text-muted)] mb-3">
-        Vision OCR is stubbed in v0.1. Upload an image to see the planned UX —
-        production will call a vision model server-side to detect groceries.
-      </p>
-      <label className="border-2 border-dashed border-[var(--border)] rounded-lg p-6 text-center mb-3 block cursor-pointer hover:bg-[var(--bg)]">
-        <Camera className="size-6 mx-auto text-[var(--text-muted)] mb-2" />
-        <p className="text-sm">Click to upload a grocery photo</p>
-        <input
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) fakeAnalyze(f);
-          }}
-        />
-      </label>
-      {analyzing && (
-        <p className="text-sm text-[var(--text-muted)]">Analyzing image…</p>
-      )}
-      {detected.length > 0 && (
-        <div className="mb-3">
+      {detected.length === 0 ? (
+        <>
+          <p className="text-sm text-[var(--text-muted)] mb-3">
+            Snap or upload a photo of your groceries or fridge — it&apos;s
+            scanned with Claude, and you confirm everything before it&apos;s
+            added.
+          </p>
+          <label className="border-2 border-dashed border-[var(--border)] rounded-lg p-6 text-center mb-1 block cursor-pointer hover:bg-[var(--bg)] aria-disabled:opacity-60">
+            <Camera className="size-6 mx-auto text-[var(--text-muted)] mb-2" />
+            <p className="text-sm">
+              {analyzing ? "Recognizing items…" : "Tap to take or upload a photo"}
+            </p>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              disabled={analyzing}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) analyze(f);
+              }}
+            />
+          </label>
+          {error && (
+            <p className="text-sm text-[var(--danger)] bg-[var(--danger-soft)] rounded-lg px-3 py-2 mt-3">
+              {error}
+            </p>
+          )}
+        </>
+      ) : (
+        <>
           <div className="text-xs text-[var(--text-muted)] mb-2">
-            Detected ingredients
+            Detected items — uncheck or edit, then add to your fridge
           </div>
-          <div className="flex flex-wrap gap-2">
-            {detected.map((d) => (
-              <Badge key={d} tone="fresh">
-                {d}
-              </Badge>
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto mb-3 pr-1">
+            {detected.map((d, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={d.include}
+                  onChange={(e) => update(i, { include: e.target.checked })}
+                  className="size-4 accent-[var(--accent)] shrink-0"
+                />
+                <Input
+                  value={d.name}
+                  onChange={(e) => update(i, { name: e.target.value })}
+                  className="flex-1"
+                />
+                <Select
+                  value={d.category}
+                  onChange={(e) => update(i, { category: e.target.value })}
+                  className="w-32 shrink-0"
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </Select>
+              </div>
             ))}
           </div>
-        </div>
+        </>
       )}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
         {detected.length > 0 && (
-          <Button onClick={commit}>Add {detected.length} items</Button>
+          <Button onClick={commit} disabled={saving || includedCount === 0}>
+            {saving ? "Adding…" : `Add ${includedCount} item${includedCount === 1 ? "" : "s"}`}
+          </Button>
         )}
       </div>
     </Modal>
   );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve(result.slice(result.indexOf(",") + 1)); // strip data: prefix
+    };
+    reader.onerror = () => reject(new Error("Couldn't read the image file."));
+    reader.readAsDataURL(file);
+  });
 }

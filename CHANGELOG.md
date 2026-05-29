@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Changes land here before the next tagged release._
+### Added
+- **Photo → ingredients (AI):** snap/upload a photo of groceries or a fridge and
+  Claude Haiku lists the items, which you confirm (editable name + category,
+  uncheck any) before adding. Photos are stored in a private, household-scoped
+  **Supabase Storage** bucket (`pantry-photos`). Recognition runs in a Supabase
+  Edge Function (`recognize-pantry`) so the API key stays server-side.
+  Requires the `ANTHROPIC_API_KEY` secret set on the Supabase project.
 
 ## [0.2.0] — 2026-05-29
 

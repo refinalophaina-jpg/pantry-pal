@@ -8,12 +8,14 @@ import {
   ChefHat,
   Clock,
   Filter,
+  Globe2,
   Plus,
   Sparkles,
 } from "lucide-react";
 import { matchRecipeAgainstPantry, useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
-import { Badge, Button, Card, Input } from "@/components/ui";
+import Link from "next/link";
+import { Badge, Button, Card, EmptyState, Input } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { CookMode } from "@/components/cook-mode";
 import { useAction } from "@/lib/use-action";
@@ -151,26 +153,55 @@ export default function RecipesPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {ranked.map(({ r, m }) => (
-          <RecipeCard
-            key={r.id}
-            recipe={r}
-            have={m.have}
-            total={m.total}
-            canCook={m.canCook}
-            equipmentOk={m.equipmentOk}
-            pantry={pantry}
-            onAddMissing={() =>
-              run(() => generateFromRecipe(r.id), {
-                success: `Missing ingredients for ${r.name} added to shopping list.`,
-                error: "Couldn't build the shopping list — try again.",
-              })
-            }
-            onCook={() => setCooking(r)}
-          />
-        ))}
-      </div>
+      {ranked.length === 0 ? (
+        <EmptyState
+          illustration="/illustrations/empty-recipes.svg"
+          title={
+            scope === "saved"
+              ? "No saved recipes yet"
+              : q || tag
+                ? "No recipes match"
+                : "No recipes yet"
+          }
+          description={
+            scope === "saved"
+              ? "Browse the Explore tab and tap the bookmark to save recipes here."
+              : q || tag
+                ? "Try a different search, or clear the filters."
+                : "Discover dishes from around the world on the Explore tab."
+          }
+          action={
+            scope === "saved" || (!q && !tag) ? (
+              <Link href="/explore">
+                <Button>
+                  <Globe2 className="size-4" /> Explore recipes
+                </Button>
+              </Link>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {ranked.map(({ r, m }) => (
+            <RecipeCard
+              key={r.id}
+              recipe={r}
+              have={m.have}
+              total={m.total}
+              canCook={m.canCook}
+              equipmentOk={m.equipmentOk}
+              pantry={pantry}
+              onAddMissing={() =>
+                run(() => generateFromRecipe(r.id), {
+                  success: `Missing ingredients for ${r.name} added to shopping list.`,
+                  error: "Couldn't build the shopping list — try again.",
+                })
+              }
+              onCook={() => setCooking(r)}
+            />
+          ))}
+        </div>
+      )}
 
       {cooking && (
         <CookMode recipe={cooking} onClose={() => setCooking(null)} />

@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ChefHat,
+  ExternalLink,
   Flame,
   Leaf,
   ShoppingCart,
@@ -15,7 +16,7 @@ import {
 import { useAppStore, matchRecipeAgainstPantry } from "@/lib/store";
 import { Badge, Button, Card } from "@/components/ui";
 import { ExpiryBanner } from "@/components/expiry-banner";
-import { daysUntil, expiryStatus, fmtDate, todayISO } from "@/lib/utils";
+import { daysUntil, dealSearchUrl, expiryStatus, fmtDate, todayISO } from "@/lib/utils";
 import { estimateRecipeNutrition } from "@/lib/nutrition";
 import { useMounted } from "@/lib/use-mounted";
 
@@ -262,23 +263,30 @@ export default function DashboardPage() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {deals.slice(0, 6).map((d) => (
-              <div
+              <a
                 key={d.id}
-                className="rounded-lg border border-[var(--border)] px-3 py-2 flex items-center justify-between"
+                href={dealSearchUrl(d.item, d.store)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group rounded-lg border border-[var(--border)] px-3 py-2 flex items-center justify-between hover:border-[var(--accent)] transition-colors"
+                title={`Compare prices for ${d.item}`}
               >
-                <div className="text-sm">
-                  <div className="font-medium">{d.item}</div>
+                <div className="text-sm min-w-0">
+                  <div className="font-medium flex items-center gap-1">
+                    {d.item}
+                    <ExternalLink className="size-3 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                   <div className="text-xs text-[var(--text-muted)]">
                     {d.store} · until {fmtDate(d.validUntil)}
                   </div>
                 </div>
-                <div className="text-sm font-semibold">
+                <div className="text-sm font-semibold whitespace-nowrap">
                   ${d.price.toFixed(2)}
                   <span className="text-xs text-[var(--text-muted)] font-normal">
                     /{d.unit}
                   </span>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         </Card>

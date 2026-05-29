@@ -27,6 +27,17 @@ export function fmtDate(iso: string) {
   return format(parseISO(iso), "MMM d");
 }
 
+/**
+ * Link a local deal to a live shopping price comparison. We have no live
+ * local-price feed, so this sends the user to Google Shopping for the item +
+ * store — real current prices and where to buy, in one click.
+ */
+export function dealSearchUrl(item: string, store: string) {
+  return `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(
+    `${item} ${store}`,
+  )}`;
+}
+
 export function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }

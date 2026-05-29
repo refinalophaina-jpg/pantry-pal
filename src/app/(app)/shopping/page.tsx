@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Sparkles, Trash2 } from "lucide-react";
+import { ExternalLink, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import {
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { useAction } from "@/lib/use-action";
-import { fmtDate } from "@/lib/utils";
+import { dealSearchUrl, fmtDate } from "@/lib/utils";
 import type { UnitType } from "@/lib/types";
 
 const UNITS: UnitType[] = ["pcs", "g", "kg", "ml", "l", "tbsp", "tsp", "cup"];
@@ -279,18 +279,32 @@ export default function ShoppingPage() {
             <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-3">
               Local deals
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-1">
               {deals.map((d) => (
-                <li key={d.id} className="text-sm flex justify-between gap-2">
-                  <div>
-                    <div className="font-medium">{d.item}</div>
-                    <div className="text-xs text-[var(--text-muted)]">
-                      {d.store} · until {fmtDate(d.validUntil)}
+                <li key={d.id}>
+                  <a
+                    href={dealSearchUrl(d.item, d.store)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex justify-between gap-2 rounded-lg -mx-2 px-2 py-1.5 text-sm hover:bg-[var(--bg)] transition-colors"
+                    title={`Compare prices for ${d.item}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium flex items-center gap-1">
+                        {d.item}
+                        <ExternalLink className="size-3 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {d.store} · until {fmtDate(d.validUntil)}
+                      </div>
                     </div>
-                  </div>
-                  <span className="font-semibold whitespace-nowrap">
-                    ${d.price.toFixed(2)}
-                  </span>
+                    <span className="font-semibold whitespace-nowrap">
+                      ${d.price.toFixed(2)}
+                      <span className="text-xs font-normal text-[var(--text-muted)]">
+                        /{d.unit}
+                      </span>
+                    </span>
+                  </a>
                 </li>
               ))}
             </ul>

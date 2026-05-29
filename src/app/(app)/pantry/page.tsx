@@ -489,23 +489,55 @@ function EditItemModal({
   );
 }
 
-const UPC_LOOKUP: Record<string, { name: string; category: string }> = {};
-const SAMPLE_PRODUCTS = [
-  { name: "Greek yogurt", category: "Dairy" },
-  { name: "Sourdough loaf", category: "Grains" },
-  { name: "Almond butter", category: "Condiments" },
-  { name: "Black beans (can)", category: "Pantry staple" },
-  { name: "Cheddar cheese", category: "Dairy" },
-  { name: "Salsa verde", category: "Condiments" },
+// Map Open Food Facts category tags onto our pantry categories.
+const OFF_CATEGORY_RULES: Array<[RegExp, string]> = [
+  [/dairy|milk|cheese|yogurt|butter|cream/i, "Dairy"],
+  [/beverage|drink|water|juice|soda|coffee|tea/i, "Beverages"],
+  [/snack|chip|crisp|cracker|cookie|candy|chocolate|biscuit/i, "Snacks"],
+  [/meat|poultry|chicken|beef|pork|fish|seafood|sausage|tofu|legume|bean/i, "Protein"],
+  [/vegetable|fruit|produce|salad/i, "Produce"],
+  [/cereal|pasta|rice|bread|grain|flour|noodle/i, "Grains"],
+  [/frozen/i, "Frozen"],
+  [/sauce|condiment|spread|ketchup|mustard|mayonnaise|vinegar/i, "Condiments"],
+  [/oil|olive/i, "Oils"],
 ];
 
-function lookupUpc(code: string): { name: string; category: string } {
-  if (UPC_LOOKUP[code]) return UPC_LOOKUP[code];
-  let h = 0;
-  for (let i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) | 0;
-  const pick = SAMPLE_PRODUCTS[Math.abs(h) % SAMPLE_PRODUCTS.length];
-  UPC_LOOKUP[code] = pick;
-  return pick;
+/**
+ * Resolve a scanned UPC/EAN to a real product via Open Food Facts — a free,
+ * open, key-less grocery database (CORS-enabled, so it works from this static
+ * site). Returns null when the code isn't found, so the UI can fall back to
+ * manual entry. ZXing already decoded the number correctly; this names it.
+ */
+async function lookupProduct(
+  code: string,
+): Promise<{ name: string; category: string } | null> {
+  try {
+    const res = await fetch(
+      `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(
+        code,
+      )}.json?fields=product_name,brands,categories_tags`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status !== 1 || !data.product) return null;
+    const p = data.product as {
+      product_name?: string;
+      brands?: string;
+      categories_tags?: string[];
+    };
+    const name = [p.brands?.split(",")[0]?.trim(), p.product_name?.trim()]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (!name) return null;
+    const tags = (p.categories_tags ?? []).join(" ");
+    const category =
+      OFF_CATEGORY_RULES.find(([re]) => re.test(tags))?.[1] ?? "Other";
+    return { name, category };
+  } catch {
+    return null;
+  }
 }
 
 function ScanInner({
@@ -523,7 +555,24 @@ function ScanInner({
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
   const [product, setProduct] = useState<{ name: string; category: string } | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const { toast } = useToast();
+
+  // Decode happened — now resolve the number to a real product (Open Food Facts).
+  async function resolveCode(text: string) {
+    setCode(text);
+    setLookingUp(true);
+    setNotFound(false);
+    const found = await lookupProduct(text);
+    setLookingUp(false);
+    if (found) {
+      setProduct(found);
+    } else {
+      setNotFound(true);
+      setProduct({ name: "", category: "Other" }); // manual entry
+    }
+  }
 
   async function start() {
     setStatus("starting");
@@ -553,10 +602,9 @@ function ScanInner({
         (result) => {
           if (result) {
             const text = result.getText();
-            setCode(text);
-            setProduct(lookupUpc(text));
             controls.stop();
             setStatus("idle");
+            void resolveCode(text);
           }
         },
       );
@@ -583,17 +631,24 @@ function ScanInner({
     setStatus("idle");
   }
 
-  function simulate() {
-    const fake = `89012${Math.floor(Math.random() * 1e8)}`;
-    setCode(fake);
-    setProduct(lookupUpc(fake));
+  function manualEntry() {
+    // No camera handy — jump straight to the editable confirm card.
+    setCode(null);
+    setNotFound(true);
+    setProduct({ name: "", category: "Other" });
+  }
+
+  function resetScan() {
+    setProduct(null);
+    setCode(null);
+    setNotFound(false);
   }
 
   async function commit() {
-    if (!product) return;
+    if (!product || !product.name.trim()) return;
     try {
       await onAdd({
-        name: product.name,
+        name: product.name.trim(),
         category: product.category,
         quantity: 1,
         unit: "pcs",
@@ -616,11 +671,42 @@ function ScanInner({
 
   return (
     <div className="space-y-3">
-      {product ? (
-        <div className="border border-[var(--border)] rounded-lg p-4 bg-[var(--accent-soft)]">
-          <div className="text-xs text-[var(--text-muted)]">UPC {code}</div>
-          <div className="font-semibold text-lg mt-0.5">{product.name}</div>
-          <div className="text-xs text-[var(--text-muted)]">{product.category}</div>
+      {lookingUp ? (
+        <div className="border border-[var(--border)] rounded-lg p-6 grid place-items-center text-sm text-[var(--text-muted)]">
+          Looking up barcode {code}…
+        </div>
+      ) : product ? (
+        <div className="border border-[var(--border)] rounded-lg p-4 space-y-3">
+          <div className="text-xs text-[var(--text-muted)]">
+            {code ? `Barcode ${code}` : "Manual entry"}
+            {notFound && code ? " · not in database, enter details" : ""}
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-muted)] block mb-1">
+              Item name
+            </label>
+            <Input
+              autoFocus
+              value={product.name}
+              onChange={(e) => setProduct({ ...product, name: e.target.value })}
+              placeholder="e.g. Black beans (can)"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-muted)] block mb-1">
+              Category
+            </label>
+            <Select
+              value={product.category}
+              onChange={(e) =>
+                setProduct({ ...product, category: e.target.value })
+              }
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </Select>
+          </div>
         </div>
       ) : (
         <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-[var(--border)]">
@@ -654,25 +740,21 @@ function ScanInner({
         </Button>
         {product ? (
           <>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setProduct(null);
-                setCode(null);
-              }}
-            >
+            <Button variant="secondary" onClick={resetScan}>
               Re-scan
             </Button>
-            <Button onClick={commit}>Add to pantry</Button>
+            <Button onClick={commit} disabled={!product.name.trim()}>
+              Add to pantry
+            </Button>
           </>
         ) : status === "running" ? (
           <Button variant="secondary" onClick={stop}>
             Stop
           </Button>
-        ) : (
+        ) : lookingUp ? null : (
           <>
-            <Button variant="secondary" onClick={simulate}>
-              Simulate
+            <Button variant="secondary" onClick={manualEntry}>
+              Enter manually
             </Button>
             <Button onClick={start} disabled={status === "starting"}>
               <ScanBarcode className="size-4" />{" "}

@@ -149,16 +149,31 @@ export function EmptyState({
   title,
   description,
   action,
+  illustration,
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  /** Path to an illustration in /public (e.g. /illustrations/empty-pantry.svg) */
+  illustration?: string;
 }) {
   return (
     <Card className="text-center py-12">
+      {illustration && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={illustration}
+          alt=""
+          aria-hidden="true"
+          className="mx-auto mb-5 w-44 h-auto select-none"
+          draggable={false}
+        />
+      )}
       <h3 className="font-medium">{title}</h3>
       {description && (
-        <p className="text-sm text-[var(--text-muted)] mt-1">{description}</p>
+        <p className="text-sm text-[var(--text-muted)] mt-1 max-w-sm mx-auto">
+          {description}
+        </p>
       )}
       {action && <div className="mt-4">{action}</div>}
     </Card>

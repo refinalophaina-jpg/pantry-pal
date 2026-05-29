@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { useMounted } from "@/lib/use-mounted";
+import { useAction } from "@/lib/use-action";
 import { format, startOfWeek, addDays, parseISO } from "date-fns";
 
 const MEALS = ["breakfast", "lunch", "dinner", "snack"] as const;
@@ -22,6 +23,7 @@ export default function MealPlanPage() {
   const recipes = useAppStore((s) => s.recipes);
   const mealPlan = useAppStore((s) => s.mealPlan);
   const { addMealPlan, removeMealPlan } = useSyncedActions();
+  const run = useAction();
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [addContext, setAddContext] = useState<
@@ -118,7 +120,11 @@ export default function MealPlanPage() {
               days={days}
               mealPlan={mealPlan}
               onAdd={(date) => setAddContext({ date, meal })}
-              onRemove={removeMealPlan}
+              onRemove={(id) =>
+                run(() => removeMealPlan(id), {
+                  error: "Couldn't remove the meal — try again.",
+                })
+              }
               recipes={recipes}
             />
           ))}
@@ -129,6 +135,7 @@ export default function MealPlanPage() {
       {mealPlan.length === 0 && (
         <div className="mt-4">
           <EmptyState
+            illustration="/illustrations/empty-meal-plan.svg"
             title="No meals planned yet"
             description="Tap any slot to drop in a recipe."
           />
@@ -147,11 +154,16 @@ export default function MealPlanPage() {
         {addContext && (
           <PickRecipe
             onPick={(recipeId) => {
-              addMealPlan({
-                date: addContext.date,
-                meal: addContext.meal,
-                recipeId,
-              });
+              const ctx = addContext;
+              run(
+                () =>
+                  addMealPlan({
+                    date: ctx.date,
+                    meal: ctx.meal,
+                    recipeId,
+                  }),
+                { error: "Couldn't add the meal — try again." },
+              );
               setAddContext(null);
             }}
           />
@@ -225,6 +237,15 @@ function Row({
 function PickRecipe({ onPick }: { onPick: (id: string) => void }) {
   const recipes = useAppStore((s) => s.recipes);
   const [selected, setSelected] = useState(recipes[0]?.id ?? "");
+
+  if (recipes.length === 0) {
+    return (
+      <p className="text-sm text-[var(--text-muted)]">
+        No recipes yet — browse the Explore tab and save a few first.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
@@ -235,7 +256,9 @@ function PickRecipe({ onPick }: { onPick: (id: string) => void }) {
         ))}
       </Select>
       <div className="flex justify-end gap-2">
-        <Button onClick={() => onPick(selected)}>Add to plan</Button>
+        <Button onClick={() => onPick(selected)} disabled={!selected}>
+          Add to plan
+        </Button>
       </div>
     </div>
   );

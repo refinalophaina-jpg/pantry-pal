@@ -16,7 +16,7 @@ import { useSyncedActions } from "@/lib/data-sync";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { CookMode } from "@/components/cook-mode";
-import { useToast } from "@/components/toast";
+import { useAction } from "@/lib/use-action";
 import type { Recipe } from "@/lib/types";
 
 const EQUIPMENT_OPTS = ["pan", "pot", "oven", "wok"];
@@ -42,7 +42,7 @@ export default function RecipesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [cooking, setCooking] = useState<Recipe | null>(null);
   const [scope, setScope] = useState<"all" | "saved">("all");
-  const { toast } = useToast();
+  const run = useAction();
 
   const recipes = useMemo(() => {
     // Saved recipes first; then built-ins deduped by name match.
@@ -161,10 +161,12 @@ export default function RecipesPage() {
             canCook={m.canCook}
             equipmentOk={m.equipmentOk}
             pantry={pantry}
-            onAddMissing={() => {
-              generateFromRecipe(r.id);
-              toast(`Missing ingredients for ${r.name} added to shopping list.`);
-            }}
+            onAddMissing={() =>
+              run(() => generateFromRecipe(r.id), {
+                success: `Missing ingredients for ${r.name} added to shopping list.`,
+                error: "Couldn't build the shopping list — try again.",
+              })
+            }
             onCook={() => setCooking(r)}
           />
         ))}

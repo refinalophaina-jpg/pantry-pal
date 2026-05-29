@@ -15,6 +15,7 @@ import type { Recipe } from "@/lib/types";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { RecipeDetail } from "@/components/recipe-detail";
+import { useToast } from "@/components/toast";
 
 // Curated short-list of the most cooked cuisines; full list comes from the API.
 const FEATURED = [
@@ -43,6 +44,7 @@ export default function ExplorePage() {
   const [searchResults, setSearchResults] = useState<Recipe[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState<Recipe | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     listAreas().then(setAreas).catch(() => {});
@@ -85,6 +87,10 @@ export default function ExplorePage() {
     try {
       const results = await searchByName(q);
       setSearchResults(results);
+    } catch {
+      // Surface the failure instead of silently snapping back to the grid.
+      setSearchResults([]);
+      toast("Search failed — check your connection and try again.", "warn");
     } finally {
       setSearching(false);
     }

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/components/toast";
+import { useAction } from "@/lib/use-action";
 import { expiryStatus } from "@/lib/utils";
 import type { PantryItem, StorageZone, UnitType } from "@/lib/types";
 
@@ -50,7 +51,7 @@ export default function PantryPage() {
     removePantryItem,
     consumeItem,
   } = useSyncedActions();
-  const { toast } = useToast();
+  const run = useAction();
 
   const [query, setQuery] = useState("");
   const [zone, setZone] = useState<StorageZone | "all">("all");
@@ -127,8 +128,13 @@ export default function PantryPage() {
 
       {filtered.length === 0 ? (
         <EmptyState
-          title="No items match"
-          description="Try a different filter, or add a new pantry item."
+          illustration="/illustrations/empty-pantry.svg"
+          title={pantry.length === 0 ? "Your pantry is empty" : "No items match"}
+          description={
+            pantry.length === 0
+              ? "Add your first item, scan a barcode, or snap a photo of your groceries."
+              : "Try a different filter, or add a new pantry item."
+          }
           action={<Button onClick={() => setOpen("add")}><Plus className="size-4" /> Add item</Button>}
         />
       ) : (
@@ -158,20 +164,25 @@ export default function PantryPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => {
-                      consumeItem(item.id, 1, "used");
-                      toast(`Used 1 ${item.unit} of ${item.name}.`);
-                    }}
+                    onClick={() =>
+                      run(() => consumeItem(item.id, 1, "used"), {
+                        success: `Used 1 ${item.unit} of ${item.name}.`,
+                        error: "Couldn't update the pantry — try again.",
+                      })
+                    }
                   >
                     <Minus className="size-3.5" /> Use 1
                   </Button>
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => {
-                      consumeItem(item.id, item.quantity, "wasted");
-                      toast(`${item.name} marked wasted.`, "warn");
-                    }}
+                    onClick={() =>
+                      run(() => consumeItem(item.id, item.quantity, "wasted"), {
+                        success: `${item.name} marked wasted.`,
+                        successKind: "warn",
+                        error: "Couldn't update the pantry — try again.",
+                      })
+                    }
                   >
                     Wasted
                   </Button>
@@ -187,7 +198,12 @@ export default function PantryPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => removePantryItem(item.id)}
+                    onClick={() =>
+                      run(() => removePantryItem(item.id), {
+                        success: `${item.name} removed.`,
+                        error: "Couldn't remove the item — try again.",
+                      })
+                    }
                     aria-label="Delete"
                   >
                     <Trash2 className="size-4" />
@@ -203,8 +219,10 @@ export default function PantryPage() {
         open={open === "add"}
         onClose={() => setOpen(null)}
         onAdd={(item) => {
-          addPantryItem(item);
-          toast(`${item.name} added to ${item.zone}.`);
+          run(() => addPantryItem(item), {
+            success: `${item.name} added to ${item.zone}.`,
+            error: "Couldn't add the item — try again.",
+          });
         }}
       />
       <EditItemModal
@@ -212,8 +230,10 @@ export default function PantryPage() {
         onClose={() => setEditing(null)}
         onSave={(patch) => {
           if (editing) {
-            updatePantryItem(editing.id, patch);
-            toast(`${editing.name} updated.`);
+            run(() => updatePantryItem(editing.id, patch), {
+              success: `${editing.name} updated.`,
+              error: "Couldn't save changes — try again.",
+            });
           }
         }}
       />
@@ -509,15 +529,26 @@ function ScanInner({
     setStatus("starting");
     setError(null);
     try {
+      // getUserMedia only exists in a secure context (https or localhost).
+      // Opening the dev server over a LAN IP (http://192.168.x.x) has no camera.
+      if (
+        typeof navigator === "undefined" ||
+        !navigator.mediaDevices?.getUserMedia
+      ) {
+        throw new Error(
+          "Camera needs a secure (https) connection. Open the site over https and allow camera access.",
+        );
+      }
+      if (!videoRef.current) throw new Error("Video not ready — try again.");
+
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       const reader = new BrowserMultiFormatReader();
-      const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-      const back = devices.find((d) => /back|rear|environment/i.test(d.label));
-      const deviceId = back?.deviceId ?? devices[0]?.deviceId;
-      if (!deviceId) throw new Error("No camera available");
-      if (!videoRef.current) throw new Error("Video not ready");
-      const controls = await reader.decodeFromVideoDevice(
-        deviceId,
+      // Prefer the rear camera via facingMode. This is far more reliable than
+      // enumerating devices and matching labels — labels and deviceIds are
+      // empty until camera permission has been granted, so the old label-match
+      // path would fall back to an invalid deviceId and never start.
+      const controls = await reader.decodeFromConstraints(
+        { video: { facingMode: { ideal: "environment" } } },
         videoRef.current,
         (result) => {
           if (result) {
@@ -532,8 +563,16 @@ function ScanInner({
       controlsRef.current = controls;
       setStatus("running");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      const raw = e instanceof Error ? e.message : String(e);
+      const name = e instanceof Error ? e.name : "";
+      const friendly = /NotAllowedError|Permission|denied/i.test(name + raw)
+        ? "Camera permission was blocked. Allow camera access for this site in your browser settings, then try again."
+        : /NotFoundError|No camera|device not found/i.test(name + raw)
+          ? "No camera was found on this device. Use “Simulate” or add the item manually."
+          : /NotReadableError|in use|could not start/i.test(name + raw)
+            ? "The camera is being used by another app. Close it and try again."
+            : raw;
+      setError(friendly);
       setStatus("error");
     }
   }
@@ -550,19 +589,23 @@ function ScanInner({
     setProduct(lookupUpc(fake));
   }
 
-  function commit() {
+  async function commit() {
     if (!product) return;
-    onAdd({
-      name: product.name,
-      category: product.category,
-      quantity: 1,
-      unit: "pcs",
-      zone: "pantry",
-    });
-    toast(`${product.name} added.`);
-    setCode(null);
-    setProduct(null);
-    onClose();
+    try {
+      await onAdd({
+        name: product.name,
+        category: product.category,
+        quantity: 1,
+        unit: "pcs",
+        zone: "pantry",
+      });
+      toast(`${product.name} added.`);
+      setCode(null);
+      setProduct(null);
+      onClose();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Couldn't add item.", "warn");
+    }
   }
 
   useEffect(() => {
@@ -669,19 +712,25 @@ function PhotoModal({
     }, 1200);
   }
 
-  function commit() {
-    detected.forEach((name) =>
-      onAdd({
-        name,
-        category: "Produce",
-        quantity: 1,
-        unit: "pcs",
-        zone: "fridge",
-      }),
-    );
-    toast(`Added ${detected.length} items from photo.`);
-    setDetected([]);
-    onClose();
+  async function commit() {
+    try {
+      // await sequentially so each insert that lands is reflected, and a
+      // failure stops with a clear message rather than a silent partial add.
+      for (const name of detected) {
+        await onAdd({
+          name,
+          category: "Produce",
+          quantity: 1,
+          unit: "pcs",
+          zone: "fridge",
+        });
+      }
+      toast(`Added ${detected.length} items from photo.`);
+      setDetected([]);
+      onClose();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Couldn't add items.", "warn");
+    }
   }
 
   return (

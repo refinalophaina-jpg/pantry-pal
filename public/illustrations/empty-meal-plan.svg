@@ -1,0 +1,16 @@
+<svg width="220" height="180" viewBox="0 0 220 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plan your week">
+  <circle cx="110" cy="92" r="78" fill="#dcfce7"/>
+  <!-- plate -->
+  <circle cx="96" cy="98" r="40" fill="#fdf6e3" stroke="#e6d8b5" stroke-width="3"/>
+  <circle cx="96" cy="98" r="27" fill="#fff8e7" stroke="#ecdfbe" stroke-width="2.5"/>
+  <!-- fork -->
+  <path d="M52 74v18m6-18v18m-6 0c0 6 6 6 6 0m-3 0v30" stroke="#16a34a" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <!-- knife -->
+  <path d="M140 74c6 2 6 16 0 24v24" stroke="#16a34a" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <!-- calendar card -->
+  <rect x="120" y="104" width="52" height="46" rx="7" fill="#ffffff" stroke="#16a34a" stroke-width="3"/>
+  <rect x="120" y="104" width="52" height="13" rx="7" fill="#16a34a"/>
+  <path d="M131 102v8M161 102v8" stroke="#15803d" stroke-width="3" stroke-linecap="round"/>
+  <path d="M128 128h10M146 128h10M128 139h10M146 139h10" stroke="#bbf7d0" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="133" cy="128" r="2" fill="#f59e0b"/>
+</svg>

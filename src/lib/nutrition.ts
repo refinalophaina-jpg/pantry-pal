@@ -174,10 +174,15 @@ export async function estimateRecipeNutrition(
     fat = 0,
     fib = 0,
     known = 0;
-  for (const ing of recipe.ingredients) {
-    if (ing.optional) continue;
-    const per = await lookupNutrition(ing.name);
-    if (!per) continue;
+  const required = recipe.ingredients.filter((i) => !i.optional);
+  // Look ingredients up in parallel; a failed/missing lookup just contributes
+  // nothing rather than rejecting the whole estimate.
+  const pers = await Promise.all(
+    required.map((ing) => lookupNutrition(ing.name).catch(() => null)),
+  );
+  required.forEach((ing, idx) => {
+    const per = pers[idx];
+    if (!per) return;
     known++;
     const grams = toGrams(ing.quantity, ing.unit, per);
     const factor = grams / 100;
@@ -186,7 +191,7 @@ export async function estimateRecipeNutrition(
     if (per.carbsG) carb += per.carbsG * factor;
     if (per.fatG) fat += per.fatG * factor;
     if (per.fiberG) fib += per.fiberG * factor;
-  }
+  });
   const servings = Math.max(1, recipe.servings || 1);
   return {
     calories: Math.round(cal),

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Button, Card, Input } from "@/components/ui";
 
@@ -40,9 +39,13 @@ export default function SignInPage() {
     <div className="min-h-screen grid place-items-center px-4 bg-[var(--bg)]">
       <Card className="w-full max-w-sm">
         <div className="flex items-center gap-2 mb-6">
-          <div className="size-9 rounded-xl bg-[var(--accent)] text-white grid place-items-center">
-            <Sparkles className="size-5" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/illustrations/logo.svg"
+            alt="Pantry Pal"
+            className="size-9 rounded-xl shadow-sm"
+            draggable={false}
+          />
           <div>
             <div className="font-semibold">Pantry Pal</div>
             <div className="text-xs text-[var(--text-muted)]">

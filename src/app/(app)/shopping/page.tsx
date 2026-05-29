@@ -13,6 +13,7 @@ import {
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
+import { useAction } from "@/lib/use-action";
 import { fmtDate } from "@/lib/utils";
 import type { UnitType } from "@/lib/types";
 
@@ -30,34 +31,47 @@ export default function ShoppingPage() {
     clearCompleted,
     generateFromRecipe,
   } = useSyncedActions();
+  const run = useAction();
 
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState<UnitType>("pcs");
 
-  function addQuick() {
-    if (!name.trim()) return;
-    addShoppingItem({
-      name: name.trim(),
-      quantity,
-      unit,
-      category: "Manual",
-    });
-    setName("");
-    setQuantity(1);
+  async function addQuick() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const ok = await run(
+      () =>
+        addShoppingItem({ name: trimmed, quantity, unit, category: "Manual" }),
+      { error: "Couldn't add to the list — try again." },
+    );
+    if (ok) {
+      setName("");
+      setQuantity(1);
+    }
   }
 
   function smartFillFromExpiring() {
     const candidates = pantry
       .filter((p) => p.quantity <= 2 || (p.quantity <= 200 && p.unit === "g"))
       .slice(0, 6);
-    candidates.forEach((c) =>
-      addShoppingItem({
-        name: c.name,
-        quantity: c.unit === "g" ? 500 : 2,
-        unit: c.unit,
-        category: "Low stock",
-      }),
+    if (candidates.length === 0) return;
+    run(
+      async () => {
+        // sequential so concurrent inserts don't race
+        for (const c of candidates) {
+          await addShoppingItem({
+            name: c.name,
+            quantity: c.unit === "g" ? 500 : 2,
+            unit: c.unit,
+            category: "Low stock",
+          });
+        }
+      },
+      {
+        success: `Added ${candidates.length} low-stock item${candidates.length === 1 ? "" : "s"}.`,
+        error: "Couldn't fill the list — try again.",
+      },
     );
   }
 
@@ -103,7 +117,11 @@ export default function ShoppingPage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={clearCompleted}
+              onClick={() =>
+                run(() => clearCompleted(), {
+                  error: "Couldn't clear items — try again.",
+                })
+              }
               disabled={!enriched.some((e) => e.done)}
             >
               Clear done
@@ -148,6 +166,7 @@ export default function ShoppingPage() {
 
           {enriched.length === 0 ? (
             <EmptyState
+              illustration="/illustrations/empty-shopping.svg"
               title="Nothing on the list yet"
               description="Add items above, or hit Smart fill to grab pantry low-stock items."
             />
@@ -166,7 +185,11 @@ export default function ShoppingPage() {
                       <input
                         type="checkbox"
                         checked={it.done}
-                        onChange={() => toggleShoppingItem(it.id)}
+                        onChange={() =>
+                          run(() => toggleShoppingItem(it.id), {
+                            error: "Couldn't update the item — try again.",
+                          })
+                        }
                         className="size-4 accent-[var(--accent)]"
                       />
                       <div className="flex-1">
@@ -195,7 +218,11 @@ export default function ShoppingPage() {
                         </Badge>
                       )}
                       <button
-                        onClick={() => removeShoppingItem(it.id)}
+                        onClick={() =>
+                          run(() => removeShoppingItem(it.id), {
+                            error: "Couldn't remove the item — try again.",
+                          })
+                        }
                         className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--danger)]"
                         aria-label="Remove"
                       >
@@ -235,7 +262,12 @@ export default function ShoppingPage() {
                   variant="secondary"
                   size="sm"
                   className="w-full justify-start"
-                  onClick={() => generateFromRecipe(r.id)}
+                  onClick={() =>
+                    run(() => generateFromRecipe(r.id), {
+                      success: `Missing ingredients for ${r.name} added.`,
+                      error: "Couldn't build the list — try again.",
+                    })
+                  }
                 >
                   {r.name}
                 </Button>

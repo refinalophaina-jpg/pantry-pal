@@ -1,0 +1,14 @@
+<svg width="220" height="180" viewBox="0 0 220 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Empty shopping list">
+  <circle cx="110" cy="92" r="78" fill="#dcfce7"/>
+  <!-- paper bag -->
+  <path d="M74 66h72l6 76a8 8 0 0 1-8 8.6H76a8 8 0 0 1-8-8.6z" fill="#fdf6e3" stroke="#e6d8b5" stroke-width="3"/>
+  <!-- folded top -->
+  <path d="M74 66c8 6 16 6 24 0 8 6 16 6 24 0 8 6 16 6 24 0v8H74z" fill="#fff8e7" stroke="#e6d8b5" stroke-width="3" stroke-linejoin="round"/>
+  <!-- handle -->
+  <path d="M92 66c0-12 36-12 36 0" stroke="#16a34a" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <!-- little green check on bag -->
+  <circle cx="110" cy="116" r="16" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/>
+  <path d="M103 116l5 5 9-10" stroke="#15803d" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="60" cy="60" r="3" fill="#86efac"/>
+  <circle cx="164" cy="70" r="4" fill="#f59e0b"/>
+</svg>

@@ -101,9 +101,10 @@ export async function randomMeals(count = 6): Promise<Recipe[]> {
   const calls = Array.from({ length: count }, () =>
     get<{ meals: MealDBFull[] | null }>("/random.php"),
   );
-  const responses = await Promise.all(calls);
+  // allSettled so one failed call doesn't wipe out the whole "Surprise me".
+  const responses = await Promise.allSettled(calls);
   const recipes = responses
-    .flatMap((r) => r.meals ?? [])
+    .flatMap((r) => (r.status === "fulfilled" ? (r.value.meals ?? []) : []))
     .map(mealToRecipe);
   // Dedupe by id (random can collide)
   const seen = new Set<string>();

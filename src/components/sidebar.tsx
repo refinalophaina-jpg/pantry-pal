@@ -10,7 +10,6 @@ import {
   CalendarDays,
   ShoppingCart,
   TrendingUp,
-  Sparkles,
   LogOut,
   Users,
   Copy,
@@ -39,9 +38,13 @@ export function Sidebar() {
   return (
     <aside className="hidden lg:flex lg:w-64 flex-col border-r border-[var(--border)] bg-[var(--surface)] sticky top-0 h-screen">
       <div className="p-6 flex items-center gap-2">
-        <div className="size-9 rounded-xl bg-[var(--accent)] text-white grid place-items-center">
-          <Sparkles className="size-5" />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/illustrations/logo.svg"
+          alt="Pantry Pal"
+          className="size-9 rounded-xl shadow-sm"
+          draggable={false}
+        />
         <div className="min-w-0">
           <div className="text-lg font-semibold leading-tight">Pantry Pal</div>
           <div className="text-xs text-[var(--text-muted)] truncate">

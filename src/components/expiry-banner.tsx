@@ -41,9 +41,12 @@ export function ExpiryBanner() {
     if (!mounted) return;
     if (permission !== "granted") return;
     const sessionKey = "pantry-pal-notified";
-    const notified: string[] = JSON.parse(
-      sessionStorage.getItem(sessionKey) ?? "[]",
-    );
+    let notified: string[] = [];
+    try {
+      notified = JSON.parse(sessionStorage.getItem(sessionKey) ?? "[]");
+    } catch {
+      notified = [];
+    }
     const now = notified.slice();
     urgent.forEach(({ p, d }) => {
       if (now.includes(p.id)) return;
@@ -57,7 +60,11 @@ export function ExpiryBanner() {
       });
       now.push(p.id);
     });
-    sessionStorage.setItem(sessionKey, JSON.stringify(now));
+    try {
+      sessionStorage.setItem(sessionKey, JSON.stringify(now));
+    } catch {
+      // sessionStorage full or unavailable — notifications still fired.
+    }
   }, [mounted, urgent, permission]);
 
   if (!mounted) return null;

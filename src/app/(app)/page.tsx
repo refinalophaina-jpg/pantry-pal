@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { useAppStore, matchRecipeAgainstPantry } from "@/lib/store";
 import { Badge, Button, Card } from "@/components/ui";
-import { PageHeader } from "@/components/page-header";
 import { ExpiryBanner } from "@/components/expiry-banner";
 import { daysUntil, expiryStatus, fmtDate, todayISO } from "@/lib/utils";
 import { estimateRecipeNutrition } from "@/lib/nutrition";
@@ -94,10 +93,30 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Good evening 👋"
-        subtitle="Here's what's happening in your kitchen today."
-      />
+      <div className="relative mb-6 overflow-hidden rounded-2xl border border-[var(--border)]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/illustrations/hero.svg"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
+        <div
+          className="relative px-6 py-10 sm:py-12"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, var(--surface) 0%, color-mix(in srgb, var(--surface) 70%, transparent) 45%, transparent 100%)",
+          }}
+        >
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+            Good evening 👋
+          </h1>
+          <p className="text-sm text-[var(--text-muted)] mt-1.5 max-w-sm">
+            Here&apos;s what&apos;s happening in your kitchen today.
+          </p>
+        </div>
+      </div>
 
       <ExpiryBanner />
 

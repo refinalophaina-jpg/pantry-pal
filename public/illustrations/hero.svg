@@ -1,0 +1,44 @@
+<svg width="640" height="200" viewBox="0 0 640 200" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Fresh produce">
+  <defs>
+    <linearGradient id="hero-bg" x1="0" y1="0" x2="640" y2="200" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#dcfce7"/>
+      <stop offset="1" stop-color="#bbf7d0"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="200" fill="url(#hero-bg)"/>
+  <!-- soft blobs -->
+  <circle cx="70" cy="40" r="60" fill="#ffffff" opacity="0.35"/>
+  <circle cx="600" cy="170" r="80" fill="#ffffff" opacity="0.30"/>
+
+  <!-- cutting board (right) -->
+  <g transform="translate(400 96)">
+    <rect x="0" y="0" width="210" height="92" rx="20" fill="#fdf6e3" stroke="#e6d8b5" stroke-width="4"/>
+    <circle cx="-2" cy="46" r="6" fill="#e6d8b5"/>
+    <!-- chopped greens -->
+    <circle cx="60" cy="40" r="9" fill="#16a34a"/>
+    <circle cx="78" cy="52" r="8" fill="#22c55e"/>
+    <circle cx="96" cy="38" r="7" fill="#15803d"/>
+    <circle cx="112" cy="54" r="9" fill="#22c55e"/>
+    <!-- knife -->
+    <path d="M150 24h44c8 0 8 14 0 14h-44z" fill="#d6d3cd"/>
+    <rect x="128" y="26" width="24" height="10" rx="5" fill="#15803d"/>
+  </g>
+
+  <!-- tomato -->
+  <g transform="translate(150 60)">
+    <circle cx="0" cy="40" r="34" fill="#f59e0b"/>
+    <path d="M0 8c-4-6-12-6-14 0 6 0 8 4 8 10 0-6 4-8 6-10z" fill="#16a34a"/>
+  </g>
+  <!-- leafy bunch -->
+  <g transform="translate(250 70)">
+    <ellipse cx="0" cy="44" rx="26" ry="34" fill="#22c55e"/>
+    <ellipse cx="-14" cy="40" rx="14" ry="26" fill="#16a34a"/>
+    <ellipse cx="14" cy="40" rx="14" ry="26" fill="#15803d"/>
+    <rect x="-3" y="70" width="6" height="20" rx="3" fill="#e6d8b5"/>
+  </g>
+  <!-- carrot -->
+  <g transform="translate(70 96) rotate(18)">
+    <path d="M0 0l16 6-40 70-12-4z" fill="#ea8a1e"/>
+    <path d="M2 -2c-6-8-2-16 4-18-2 6 2 8 6 10-6 0-8 4-10 8zM10 2c0-8 6-12 12-12-2 6-4 10-12 12z" fill="#16a34a"/>
+  </g>
+</svg>

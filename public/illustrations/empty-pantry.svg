@@ -1,0 +1,16 @@
+<svg width="220" height="180" viewBox="0 0 220 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Empty pantry">
+  <circle cx="110" cy="92" r="78" fill="#dcfce7"/>
+  <!-- shelf -->
+  <rect x="44" y="120" width="132" height="7" rx="3.5" fill="#e7d9b8"/>
+  <!-- basket -->
+  <path d="M70 92h80l-7 30a10 10 0 0 1-9.8 8H86.8a10 10 0 0 1-9.8-8z" fill="#fdf6e3" stroke="#e6d8b5" stroke-width="3"/>
+  <rect x="64" y="86" width="92" height="11" rx="5.5" fill="#fff8e7" stroke="#e6d8b5" stroke-width="3"/>
+  <path d="M92 98l-3 28M110 98v28M128 98l3 28" stroke="#ecdfbe" stroke-width="3" stroke-linecap="round"/>
+  <!-- one stray leaf -->
+  <path d="M110 84c-2.4-6-7.6-9.6-13.4-9.2 1.2 5.6 5.2 9.8 10.8 11.2" fill="#86efac"/>
+  <path d="M110 84c2-6.2 7.2-10 13.6-9.4-1.2 6-5.4 10.2-11.2 11.4" fill="#22c55e"/>
+  <!-- soft sparkles -->
+  <circle cx="58" cy="64" r="3" fill="#86efac"/>
+  <circle cx="166" cy="74" r="4" fill="#bbf7d0"/>
+  <circle cx="150" cy="50" r="2.5" fill="#f59e0b"/>
+</svg>

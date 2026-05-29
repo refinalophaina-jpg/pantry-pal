@@ -1,0 +1,70 @@
+# Changelog
+
+All notable changes to Pantry Pal are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+_Changes land here before the next tagged release._
+
+## [0.2.0] — 2026-05-29
+
+A reliability, content, and polish release: the app now ships real recipes, a
+working barcode scanner, a cohesive illustrated look, and installs on iOS.
+
+### Added
+- **Chef Pham's recipe collection** — replaced the placeholder samples with 20
+  real recipes across Thai, Vietnamese, Chinese, Korean, Nigerian, Indian and
+  American cooking (plus sauces and desserts), tagged by cuisine and
+  vegan/vegetarian, with quantities, steps, and nutrition estimates.
+- **Real barcode product lookup** via Open Food Facts (free, key-less), with an
+  editable confirm step and manual-entry fallback. ZXing still does decoding.
+- **Warm illustrated visual system** — custom logo/app mark, dashboard hero
+  banner, and empty-state illustrations for pantry, shopping, meal plan and
+  recipes (hand-authored SVG).
+- **Installable iOS PWA** — web manifest, app icons, theme colour, apple-web-app
+  metadata, and an offline-shell service worker.
+- **Interactive deals** — dashboard and shopping deal rows link out to a live
+  price comparison for the item + store.
+- Recipe detail: ingredient-availability bar, calories-first per-serving grid,
+  a gradient header for photo-less recipes, and Escape-to-close + scroll lock.
+- Detailed `README.md` and this `CHANGELOG.md`.
+
+### Changed
+- All store writes now route through a `useAction` helper: success toasts fire
+  only after the write lands, and failures surface as warnings.
+- Onboarding's household creation has a timeout + error handling so it can't
+  hang silently.
+
+### Fixed
+- **Household creation was impossible** — the `households` `SELECT` policy
+  depended on a membership row created by an `AFTER INSERT` trigger, so the
+  `insert().select()` read-back failed RLS. The creator can now read their own
+  household. Also restored `EXECUTE` on `is_household_member` to `authenticated`
+  (a prior hardening migration had revoked it, breaking every table's RLS).
+- **Hydration mismatches** from `new Date()` during render on the dashboard,
+  meal plan and analytics (stale at static-export build time) — now deferred
+  behind a mounted flag.
+- Camera scanner wouldn't start: switched from device-label matching to
+  `decodeFromConstraints({ facingMode: "environment" })` with friendly
+  permission/secure-context errors.
+- `randomMeals` no longer fails entirely when one request fails; explore search
+  surfaces errors; nutrition lookups run in parallel and are crash-guarded.
+
+## [0.1.0] — 2026-05-28
+
+Initial release.
+
+### Added
+- Supabase **auth**, households, invite flow, Row-Level Security, and live
+  **realtime sync** of pantry, shopping list, meal plan, usage and saved recipes.
+- Core pages: dashboard, pantry (with barcode/photo entry), recipes with cook
+  mode, weekly meal plan, deal-aware shopping list, and analytics.
+- **Explore** tab powered by TheMealDB; built-in + cached nutrition estimates.
+- Static export build and Cloudflare Pages deployment.
+
+[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/refinalophaina-jpg/pantry-pal/releases/tag/v0.1.0

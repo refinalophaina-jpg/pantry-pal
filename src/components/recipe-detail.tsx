@@ -61,6 +61,32 @@ export function RecipeDetail({
     nutrition &&
     nutrition.knownIngredients < nutrition.totalIngredients;
 
+  // Close on Escape and lock background scroll while the modal is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  // How much of this recipe the pantry already covers (non-optional only).
+  const required = recipe.ingredients.filter((i) => !i.optional);
+  const haveCount = required.filter((ing) => {
+    const owned = pantry.find(
+      (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
+    );
+    return owned && owned.quantity >= ing.quantity;
+  }).length;
+  const haveTotal = required.length;
+  const havePct = haveTotal ? Math.round((haveCount / haveTotal) * 100) : 0;
+  const canCookAll = haveTotal > 0 && haveCount === haveTotal;
+
   // A recipe is "saved" when there's a savedRecipes entry that matches it.
   // We match by externalId first (e.g. MealDB id), then by name.
   const saved = recipe.savedId
@@ -116,7 +142,7 @@ export function RecipeDetail({
           <X className="size-5" />
         </button>
 
-        {recipe.imageUrl && (
+        {recipe.imageUrl ? (
           <div className="relative aspect-[16/9] w-full overflow-hidden rounded-t-2xl bg-[var(--bg)]">
             <Image
               src={recipe.imageUrl}
@@ -135,17 +161,27 @@ export function RecipeDetail({
               </p>
             </div>
           </div>
+        ) : (
+          // Recipes without a photo (built-ins) get a warm gradient header so
+          // the modal looks intentional rather than a bare text block.
+          <div
+            className="relative overflow-hidden rounded-t-2xl px-6 sm:px-8 py-10 text-white"
+            style={{
+              backgroundImage:
+                "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
+            }}
+          >
+            <ChefHat className="absolute -right-3 -bottom-4 size-32 text-white/10" />
+            <h2 className="relative text-2xl sm:text-3xl font-semibold leading-tight pr-10">
+              {recipe.name}
+            </h2>
+            <p className="relative text-sm text-white/85 mt-1 max-w-lg">
+              {recipe.description}
+            </p>
+          </div>
         )}
 
         <div className="p-6 sm:p-8">
-          {!recipe.imageUrl && (
-            <>
-              <h2 className="text-2xl font-semibold">{recipe.name}</h2>
-              <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
-                {recipe.description}
-              </p>
-            </>
-          )}
 
           <div className="flex flex-wrap gap-3 text-sm text-[var(--text-muted)] mb-4">
             <Stat icon={<Clock className="size-3.5" />}>
@@ -174,6 +210,27 @@ export function RecipeDetail({
                   {t}
                 </Badge>
               ))}
+            </div>
+          )}
+
+          {haveTotal > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-[var(--text-muted)]">
+                  {canCookAll
+                    ? "You have everything for this 🎉"
+                    : "Ingredients you already have"}
+                </span>
+                <span className="font-medium">
+                  {haveCount} / {haveTotal}
+                </span>
+              </div>
+              <div className="h-2 bg-[var(--bg)] rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--accent)] transition-all"
+                  style={{ width: `${havePct}%` }}
+                />
+              </div>
             </div>
           )}
 
@@ -271,10 +328,11 @@ export function RecipeDetail({
             </ol>
           </Section>
 
-          {(protein || carbs || fat) && (
+          {(cal || protein || carbs || fat) && (
             <Section title="Per serving">
-              <div className="grid grid-cols-3 gap-3 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 {[
+                  ["Calories", cal, " kcal"],
                   ["Protein", protein, "g"],
                   ["Carbs", carbs, "g"],
                   ["Fat", fat, "g"],

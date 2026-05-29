@@ -5,6 +5,7 @@ import { ChefHat, Leaf, TrendingDown, Wallet } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { Badge, Card } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
+import { useMounted } from "@/lib/use-mounted";
 import { format, parseISO, subDays } from "date-fns";
 
 export default function AnalyticsPage() {
@@ -33,13 +34,17 @@ export default function AnalyticsPage() {
     return Object.entries(z);
   }, [pantry]);
 
+  // subDays(new Date(), …) reads the wall clock; defer to after mount so the
+  // static-export HTML and the first client render agree (empty chart).
+  const mounted = useMounted();
   const last14Days = useMemo(() => {
+    if (!mounted) return [];
     return Array.from({ length: 14 }, (_, i) => {
       const d = format(subDays(new Date(), 13 - i), "yyyy-MM-dd");
       const count = mealPlan.filter((m) => m.date === d).length;
       return { date: d, count };
     });
-  }, [mealPlan]);
+  }, [mounted, mealPlan]);
 
   const maxCount = Math.max(1, ...last14Days.map((d) => d.count));
 
@@ -134,7 +139,13 @@ export default function AnalyticsPage() {
             </Badge>
           </div>
           <div className="flex items-end gap-1 h-32">
-            {last14Days.map((d) => (
+            {!mounted
+              ? Array.from({ length: 14 }).map((_, i) => (
+                  <div key={i} className="flex-1 h-full flex items-end">
+                    <div className="w-full h-3 rounded-t-md bg-[var(--bg)] animate-pulse" />
+                  </div>
+                ))
+              : last14Days.map((d) => (
               <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
                 <div className="flex-1 w-full flex items-end">
                   <div

@@ -81,6 +81,7 @@ interface AppState {
   removeShoppingItem: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
   clearCompleted: (ctx: SyncedActionsCtx) => Promise<void>;
   generateFromRecipe: (recipeId: string, ctx: SyncedActionsCtx) => Promise<void>;
+  buildWeekList: (dates: string[], ctx: SyncedActionsCtx) => Promise<number>;
 
   addMealPlan: (
     entry: Omit<MealPlanEntry, "id">,
@@ -492,6 +493,64 @@ export const useAppStore = create<AppState>()(
             ctx,
           );
         }
+      },
+
+      // Build a shopping list for a set of dates: sum every planned recipe's
+      // non-optional ingredients, subtract what's already in the pantry (by
+      // name + unit) and what's already on the list, and add the remainder.
+      // Returns how many items were added.
+      buildWeekList: async (dates, ctx) => {
+        const { mealPlan, recipes, savedRecipes, pantry, shopping } = get();
+        const all = [...savedRecipes, ...recipes];
+        const planned = mealPlan.filter((m) => dates.includes(m.date));
+
+        const need = new Map<
+          string,
+          { name: string; quantity: number; unit: UnitType; recipe: string }
+        >();
+        for (const entry of planned) {
+          const r = all.find((x) => x.id === entry.recipeId);
+          if (!r) continue;
+          for (const ing of r.ingredients) {
+            if (ing.optional) continue;
+            const key = `${ing.name.toLowerCase()}|${ing.unit}`;
+            const prev = need.get(key);
+            if (prev) prev.quantity += ing.quantity;
+            else
+              need.set(key, {
+                name: ing.name,
+                quantity: ing.quantity,
+                unit: ing.unit,
+                recipe: r.name,
+              });
+          }
+        }
+
+        const onList = new Set(shopping.map((s) => s.name.toLowerCase()));
+        let added = 0;
+        for (const item of need.values()) {
+          const owned = pantry.find(
+            (p) =>
+              p.name.toLowerCase() === item.name.toLowerCase() &&
+              p.unit === item.unit,
+          );
+          const deficit = owned ? item.quantity - owned.quantity : item.quantity;
+          if (deficit <= 0) continue; // already have enough
+          if (onList.has(item.name.toLowerCase())) continue; // avoid dupes
+          await get().addShoppingItem(
+            {
+              name: item.name,
+              quantity: Math.ceil(deficit),
+              unit: item.unit,
+              category: "This week",
+              fromRecipe: item.recipe,
+            },
+            ctx,
+          );
+          onList.add(item.name.toLowerCase());
+          added++;
+        }
+        return added;
       },
 
       addMealPlan: async (entry, ctx) => {

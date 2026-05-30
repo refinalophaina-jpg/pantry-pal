@@ -1,7 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  CalendarRange,
+  ExternalLink,
+  PackageCheck,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import { startOfWeek, addDays, format } from "date-fns";
 import { useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import {
@@ -14,10 +22,20 @@ import {
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { useAction } from "@/lib/use-action";
+import { useToast } from "@/components/toast";
 import { dealSearchUrl, fmtDate } from "@/lib/utils";
 import type { UnitType } from "@/lib/types";
 
 const UNITS: UnitType[] = ["pcs", "g", "kg", "ml", "l", "tbsp", "tsp", "cup"];
+
+// Mon–Sun of the current week, as yyyy-MM-dd. Computed on demand (in a click
+// handler, never during render) so it stays hydration-safe.
+function currentWeekDates(): string[] {
+  const start = startOfWeek(new Date(), { weekStartsOn: 1 });
+  return Array.from({ length: 7 }, (_, i) =>
+    format(addDays(start, i), "yyyy-MM-dd"),
+  );
+}
 
 export default function ShoppingPage() {
   const shopping = useAppStore((s) => s.shopping);
@@ -30,8 +48,48 @@ export default function ShoppingPage() {
     removeShoppingItem,
     clearCompleted,
     generateFromRecipe,
+    buildWeekList,
+    addPantryItem,
   } = useSyncedActions();
   const run = useAction();
+  const { toast } = useToast();
+
+  async function buildWeek() {
+    try {
+      const n = await buildWeekList(currentWeekDates());
+      toast(
+        n > 0
+          ? `Added ${n} item${n === 1 ? "" : "s"} you still need this week.`
+          : "You're already stocked for this week's plan 🎉",
+        n > 0 ? "success" : "info",
+      );
+    } catch (e) {
+      toast(
+        e instanceof Error ? e.message : "Couldn't build the list.",
+        "warn",
+      );
+    }
+  }
+
+  // "Got it" — move a purchased item into the pantry and off the list.
+  function moveToPantry(it: (typeof shopping)[number]) {
+    run(
+      async () => {
+        await addPantryItem({
+          name: it.name,
+          category: it.category === "This week" ? "Other" : it.category,
+          quantity: it.quantity,
+          unit: it.unit,
+          zone: "pantry",
+        });
+        await removeShoppingItem(it.id);
+      },
+      {
+        success: `${it.name} moved to your pantry.`,
+        error: "Couldn't move the item — try again.",
+      },
+    );
+  }
 
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -108,9 +166,12 @@ export default function ShoppingPage() {
     <div>
       <PageHeader
         title="Shopping list"
-        subtitle="Auto-matched against local deals from nearby stores."
+        subtitle="What you still need — built from this week's meal plan and your pantry."
         actions={
           <>
+            <Button variant="secondary" size="sm" onClick={buildWeek}>
+              <CalendarRange className="size-4" /> Build week&apos;s list
+            </Button>
             <Button variant="secondary" size="sm" onClick={smartFillFromExpiring}>
               <Sparkles className="size-4" /> Smart fill
             </Button>
@@ -168,7 +229,7 @@ export default function ShoppingPage() {
             <EmptyState
               illustration="/illustrations/empty-shopping.svg"
               title="Nothing on the list yet"
-              description="Add items above, or hit Smart fill to grab pantry low-stock items."
+              description="Hit “Build week's list” to pull everything this week's meal plan needs that you don't already have — or add items by hand."
             />
           ) : (
             Object.entries(grouped).map(([cat, items]) => (
@@ -217,6 +278,14 @@ export default function ShoppingPage() {
                           {it.deal.store} ${it.deal.price.toFixed(2)}
                         </Badge>
                       )}
+                      <button
+                        onClick={() => moveToPantry(it)}
+                        className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--accent-hover)]"
+                        aria-label="Got it — move to pantry"
+                        title="Got it — move to pantry"
+                      >
+                        <PackageCheck className="size-4" />
+                      </button>
                       <button
                         onClick={() =>
                           run(() => removeShoppingItem(it.id), {

@@ -201,6 +201,7 @@ export function useSyncedActions() {
     clearCompleted: () => store.clearCompleted(ctx),
     generateFromRecipe: (recipeId: string) =>
       store.generateFromRecipe(recipeId, ctx),
+    buildWeekList: (dates: string[]) => store.buildWeekList(dates, ctx),
     addMealPlan: (entry: Parameters<typeof store.addMealPlan>[0]) =>
       store.addMealPlan(entry, ctx),
     removeMealPlan: (id: string) => store.removeMealPlan(id, ctx),

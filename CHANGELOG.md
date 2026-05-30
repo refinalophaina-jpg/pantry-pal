@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Supabase Storage** bucket (`pantry-photos`). Recognition runs in a Supabase
   Edge Function (`recognize-pantry`) so the API key stays server-side.
   Requires the `ANTHROPIC_API_KEY` secret set on the Supabase project.
+- **Spoonacular recipe engine:** Explore now searches thousands of recipes across
+  every cuisine (deep coverage for Indian/French/Vietnamese/Thai/Chinese/Korean/
+  African…), each opening a full recipe (ingredients, steps) you can save/cook/
+  add-to-list. Proxied via the `recipe-search` Edge Function. Requires the
+  `SPOONACULAR_API_KEY` secret. (Replaces TheMealDB's free key, which returned 0
+  results for Indian/French.)
+- **Smart shopping list:** "Build week's list" derives what to buy from this
+  week's meal plan minus what's in the pantry (consolidated, de-duped); "Got it →
+  move to pantry" closes the loop.
+- **AI weekly meal-plan generator:** Claude assigns your recipes across a 1–2 week
+  span by preferences (`generate-meal-plan` Edge Function), capped at 10/day per
+  household via an `ai_usage` table.
+
+### Fixed
+- **Service worker no longer serves stale builds** — switched to network-first
+  for HTML/navigations (cache-first only for hashed assets), so deploys take
+  effect immediately. This was the main cause of "nothing works."
 
 ## [0.2.0] — 2026-05-29
 

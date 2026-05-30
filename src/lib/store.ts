@@ -88,6 +88,10 @@ interface AppState {
     ctx: SyncedActionsCtx,
   ) => Promise<void>;
   removeMealPlan: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
+  generateMealPlan: (
+    opts: { dates: string[]; meals: string[]; preferences: string },
+    ctx: SyncedActionsCtx,
+  ) => Promise<number>;
 
   saveRecipe: (recipe: Recipe, ctx: SyncedActionsCtx) => Promise<string>;
   unsaveRecipe: (savedId: string, ctx: SyncedActionsCtx) => Promise<void>;
@@ -579,6 +583,45 @@ export const useAppStore = create<AppState>()(
           .eq("household_id", ctx.householdId);
         if (error) throw error;
         get()._removeMealPlan(id);
+      },
+
+      // Ask Claude (server-side, capped) to assign known recipes across the given
+      // dates/meals, then persist the returned entries. Returns how many landed.
+      generateMealPlan: async (opts, ctx) => {
+        const { recipes, savedRecipes } = get();
+        const candidates = [...savedRecipes, ...recipes].map((r) => ({
+          id: r.id,
+          name: r.name,
+          cuisine: r.cuisine,
+          tags: r.tags,
+          minutes: r.minutes,
+        }));
+        const { data, error } = await supa().functions.invoke(
+          "generate-meal-plan",
+          {
+            body: {
+              householdId: ctx.householdId,
+              dates: opts.dates,
+              meals: opts.meals,
+              preferences: opts.preferences,
+              candidates,
+            },
+          },
+        );
+        if (error) throw new Error(error.message || "Generation failed.");
+        if (data?.error) throw new Error(data.error);
+        const entries = (data?.entries ?? []) as Array<{
+          date: string;
+          meal: MealPlanEntry["meal"];
+          recipeId: string;
+        }>;
+        for (const e of entries) {
+          await get().addMealPlan(
+            { date: e.date, meal: e.meal, recipeId: e.recipeId },
+            ctx,
+          );
+        }
+        return entries.length;
       },
 
       saveRecipe: async (recipe, ctx) => {

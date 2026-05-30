@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, Sparkles, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import {
@@ -9,26 +9,38 @@ import {
   Button,
   Card,
   EmptyState,
+  Input,
   Modal,
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { useMounted } from "@/lib/use-mounted";
 import { useAction } from "@/lib/use-action";
+import { useToast } from "@/components/toast";
 import { format, startOfWeek, addDays, parseISO } from "date-fns";
 
 const MEALS = ["breakfast", "lunch", "dinner", "snack"] as const;
 
 export default function MealPlanPage() {
   const recipes = useAppStore((s) => s.recipes);
+  const savedRecipes = useAppStore((s) => s.savedRecipes);
   const mealPlan = useAppStore((s) => s.mealPlan);
-  const { addMealPlan, removeMealPlan } = useSyncedActions();
+  const { addMealPlan, removeMealPlan, generateMealPlan } = useSyncedActions();
   const run = useAction();
+  const { toast } = useToast();
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [addContext, setAddContext] = useState<
     null | { date: string; meal: (typeof MEALS)[number] }
   >(null);
+
+  // AI generator state
+  const [genOpen, setGenOpen] = useState(false);
+  const [genBusy, setGenBusy] = useState(false);
+  const [prefs, setPrefs] = useState("");
+  const [genDays, setGenDays] = useState(7);
+  const [genMeals, setGenMeals] = useState<string[]>(["dinner"]);
+  const recipeCount = recipes.length + savedRecipes.length;
 
   // The week grid is computed from the current date, which differs between the
   // static-export build and the client. Defer it to after mount so server HTML
@@ -53,13 +65,48 @@ export default function MealPlanPage() {
     });
   }, [weekStart]);
 
+  function toggleGenMeal(m: string) {
+    setGenMeals((arr) =>
+      arr.includes(m) ? arr.filter((x) => x !== m) : [...arr, m],
+    );
+  }
+
+  async function generatePlan() {
+    if (!weekStart || genMeals.length === 0) return;
+    setGenBusy(true);
+    try {
+      const dates = Array.from({ length: genDays }, (_, i) =>
+        format(addDays(weekStart, i), "yyyy-MM-dd"),
+      );
+      const n = await generateMealPlan({
+        dates,
+        meals: genMeals,
+        preferences: prefs,
+      });
+      toast(
+        n > 0
+          ? `Added ${n} meal${n === 1 ? "" : "s"} to your plan.`
+          : "Couldn't place any meals — try different preferences.",
+        n > 0 ? "success" : "warn",
+      );
+      if (n > 0) setGenOpen(false);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Generation failed.", "warn");
+    } finally {
+      setGenBusy(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Meal plan"
-        subtitle="Drag a recipe onto a slot — or use the menu picker."
+        subtitle="Generate a week with AI, or build it yourself slot by slot."
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" onClick={() => setGenOpen(true)} disabled={!mounted}>
+              <Sparkles className="size-4" /> Generate
+            </Button>
             <Button
               variant="secondary"
               size="sm"
@@ -167,6 +214,83 @@ export default function MealPlanPage() {
               setAddContext(null);
             }}
           />
+        )}
+      </Modal>
+
+      <Modal
+        open={genOpen}
+        onClose={() => !genBusy && setGenOpen(false)}
+        title="Generate a meal plan"
+      >
+        {recipeCount === 0 ? (
+          <p className="text-sm text-[var(--text-muted)]">
+            Save a few recipes first (browse Explore) so there&apos;s something
+            to plan with.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-[var(--text-muted)] block mb-1">
+                Preferences (optional)
+              </label>
+              <Input
+                placeholder="e.g. lots of veggies, quick on weeknights, Thai + Italian"
+                value={prefs}
+                onChange={(e) => setPrefs(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="text-xs text-[var(--text-muted)] block mb-1">
+                  Span
+                </label>
+                <Select
+                  value={String(genDays)}
+                  onChange={(e) => setGenDays(Number(e.target.value))}
+                >
+                  <option value="7">This week (7 days)</option>
+                  <option value="14">Two weeks (14 days)</option>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-[var(--text-muted)] block mb-1">
+                  Meals
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {MEALS.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => toggleGenMeal(m)}
+                      className={`rounded-full px-2.5 py-1 text-xs border capitalize transition-colors ${
+                        genMeals.includes(m)
+                          ? "bg-[var(--accent)] border-[var(--accent)] text-white"
+                          : "border-[var(--border)] text-[var(--text-muted)]"
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Picks from your {recipeCount} recipes, starting the displayed week.
+              Up to 10 generations/day.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setGenOpen(false)} disabled={genBusy}>
+                Cancel
+              </Button>
+              <Button
+                onClick={generatePlan}
+                disabled={genBusy || genMeals.length === 0}
+              >
+                <Sparkles className="size-4" />
+                {genBusy ? "Planning…" : "Generate"}
+              </Button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

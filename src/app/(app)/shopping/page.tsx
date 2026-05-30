@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarRange,
   ExternalLink,
+  MapPin,
   PackageCheck,
   Plus,
   Sparkles,
@@ -12,18 +13,30 @@ import {
 import { startOfWeek, addDays, format } from "date-fns";
 import { useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
+import { useAuth } from "@/lib/auth-context";
 import {
   Badge,
   Button,
   Card,
   EmptyState,
   Input,
+  Modal,
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/toast";
 import { dealSearchUrl, fmtDate } from "@/lib/utils";
+import {
+  listStores,
+  addStore,
+  listItemLocations,
+  upsertItemLocation,
+  storeFinderUrl,
+  SUGGESTED_STORES,
+  type Store,
+  type ItemLocation,
+} from "@/lib/stores";
 import type { UnitType } from "@/lib/types";
 
 const UNITS: UnitType[] = ["pcs", "g", "kg", "ml", "l", "tbsp", "tsp", "cup"];
@@ -91,9 +104,73 @@ export default function ShoppingPage() {
     );
   }
 
+  const { household, user } = useAuth();
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState<UnitType>("pcs");
+
+  // Stores + per-store item layout (self-contained from the global store).
+  const [stores, setStores] = useState<Store[]>([]);
+  const [activeStoreId, setActiveStoreId] = useState<string>("");
+  const [locations, setLocations] = useState<ItemLocation[]>([]);
+  const [editItem, setEditItem] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!household) return;
+    listStores(household.id).then(setStores).catch(() => {});
+  }, [household]);
+
+  useEffect(() => {
+    if (!household || !activeStoreId) {
+      setLocations([]);
+      return;
+    }
+    listItemLocations(household.id, activeStoreId)
+      .then(setLocations)
+      .catch(() => {});
+  }, [household, activeStoreId]);
+
+  const activeStore = stores.find((s) => s.id === activeStoreId);
+
+  function quickAddStore(storeName: string) {
+    if (!household || !user) return;
+    run(
+      async () => {
+        const s = await addStore(household.id, user.id, storeName, "77056");
+        setStores((arr) =>
+          [...arr, s].sort((a, b) => a.name.localeCompare(b.name)),
+        );
+        setActiveStoreId(s.id);
+      },
+      { success: `${storeName} added.`, error: "Couldn't add the store." },
+    );
+  }
+
+  function saveLocation(
+    itemName: string,
+    patch: { aisle?: string; section?: string; price?: number | null },
+  ) {
+    if (!household || !user || !activeStoreId) return;
+    run(
+      async () => {
+        const loc = await upsertItemLocation({
+          householdId: household.id,
+          userId: user.id,
+          storeId: activeStoreId,
+          itemName,
+          ...patch,
+        });
+        setLocations((arr) => [
+          ...arr.filter(
+            (l) => l.item_name.toLowerCase() !== itemName.toLowerCase(),
+          ),
+          loc,
+        ]);
+      },
+      { success: "Saved.", error: "Couldn't save the location." },
+    );
+    setEditItem(null);
+  }
 
   async function addQuick() {
     const trimmed = name.trim();
@@ -144,14 +221,34 @@ export default function ShoppingPage() {
     [shopping, deals],
   );
 
+  const locByName = useMemo(() => {
+    const m = new Map<string, ItemLocation>();
+    locations.forEach((l) => m.set(l.item_name.toLowerCase(), l));
+    return m;
+  }, [locations]);
+
+  // Group by store aisle when a store is selected, else by category.
   const grouped = useMemo(() => {
     const g: Record<string, typeof enriched> = {};
     enriched.forEach((it) => {
-      g[it.category] = g[it.category] ?? [];
-      g[it.category].push(it);
+      const key = activeStoreId
+        ? locByName.get(it.name.toLowerCase())?.aisle?.trim() || "Unsorted"
+        : it.category;
+      g[key] = g[key] ?? [];
+      g[key].push(it);
     });
     return g;
-  }, [enriched]);
+  }, [enriched, activeStoreId, locByName]);
+
+  const groupOrder = useMemo(() => {
+    const keys = Object.keys(grouped);
+    if (!activeStoreId) return keys;
+    return keys.sort((a, b) => {
+      if (a === "Unsorted") return 1;
+      if (b === "Unsorted") return -1;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+  }, [grouped, activeStoreId]);
 
   const estimatedTotal = enriched.reduce(
     (sum, it) => sum + (it.deal?.price ?? 3.5) * it.quantity,
@@ -225,6 +322,72 @@ export default function ShoppingPage() {
             </div>
           </Card>
 
+          <Card>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-[var(--text-muted)]">
+                Shopping at
+              </span>
+              <Select
+                className="w-44"
+                value={activeStoreId}
+                onChange={(e) => setActiveStoreId(e.target.value)}
+              >
+                <option value="">By category</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+              {activeStore && (
+                <a
+                  href={storeFinderUrl(
+                    activeStore.name,
+                    activeStore.zip || "77056",
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-[var(--accent-hover)] hover:underline"
+                >
+                  <MapPin className="size-3.5" /> Find near{" "}
+                  {activeStore.zip || "me"}
+                </a>
+              )}
+            </div>
+            {SUGGESTED_STORES.filter(
+              (s) =>
+                !stores.some(
+                  (st) => st.name.toLowerCase() === s.toLowerCase(),
+                ),
+            ).length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-[var(--text-muted)]">
+                  Add a store:
+                </span>
+                {SUGGESTED_STORES.filter(
+                  (s) =>
+                    !stores.some(
+                      (st) => st.name.toLowerCase() === s.toLowerCase(),
+                    ),
+                ).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => quickAddStore(s)}
+                    className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs hover:border-[var(--accent)] transition-colors"
+                  >
+                    + {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            {activeStoreId && (
+              <p className="text-[11px] text-[var(--text-muted)] mt-2">
+                Grouped by aisle. Tap the pin on an item to record its aisle,
+                shelf and price here — remembered for next time.
+              </p>
+            )}
+          </Card>
+
           {enriched.length === 0 ? (
             <EmptyState
               illustration="/illustrations/empty-shopping.svg"
@@ -232,10 +395,16 @@ export default function ShoppingPage() {
               description="Hit “Build week's list” to pull everything this week's meal plan needs that you don't already have — or add items by hand."
             />
           ) : (
-            Object.entries(grouped).map(([cat, items]) => (
+            groupOrder.map((cat) => {
+              const items = grouped[cat];
+              return (
               <Card key={cat}>
                 <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-3">
-                  {cat}
+                  {activeStoreId
+                    ? cat === "Unsorted"
+                      ? "Unsorted — set aisles"
+                      : `Aisle ${cat}`
+                    : cat}
                 </div>
                 <ul className="space-y-2">
                   {items.map((it) => (
@@ -273,10 +442,29 @@ export default function ShoppingPage() {
                           )}
                         </div>
                       </div>
+                      {activeStoreId &&
+                        locByName.get(it.name.toLowerCase())?.price != null && (
+                          <Badge tone="fresh">
+                            $
+                            {locByName
+                              .get(it.name.toLowerCase())!
+                              .price!.toFixed(2)}
+                          </Badge>
+                        )}
                       {it.deal && (
                         <Badge tone="fresh">
                           {it.deal.store} ${it.deal.price.toFixed(2)}
                         </Badge>
+                      )}
+                      {activeStoreId && (
+                        <button
+                          onClick={() => setEditItem(it.name)}
+                          className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--accent-hover)]"
+                          aria-label="Set aisle / shelf / price"
+                          title="Set aisle / shelf / price"
+                        >
+                          <MapPin className="size-4" />
+                        </button>
                       )}
                       <button
                         onClick={() => moveToPantry(it)}
@@ -301,7 +489,8 @@ export default function ShoppingPage() {
                   ))}
                 </ul>
               </Card>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -380,6 +569,93 @@ export default function ShoppingPage() {
           </Card>
         </div>
       </div>
+
+      {editItem && (
+        <LocationEditor
+          itemName={editItem}
+          current={locByName.get(editItem.toLowerCase()) ?? null}
+          onClose={() => setEditItem(null)}
+          onSave={(patch) => saveLocation(editItem, patch)}
+        />
+      )}
     </div>
+  );
+}
+
+function LocationEditor({
+  itemName,
+  current,
+  onClose,
+  onSave,
+}: {
+  itemName: string;
+  current: ItemLocation | null;
+  onClose: () => void;
+  onSave: (patch: {
+    aisle?: string;
+    section?: string;
+    price?: number | null;
+  }) => void;
+}) {
+  const [aisle, setAisle] = useState(current?.aisle ?? "");
+  const [section, setSection] = useState(current?.section ?? "");
+  const [price, setPrice] = useState(
+    current?.price != null ? String(current.price) : "",
+  );
+  return (
+    <Modal open onClose={onClose} title={`Where is "${itemName}"?`}>
+      <div className="space-y-3">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="text-xs text-[var(--text-muted)] block mb-1">
+              Aisle
+            </label>
+            <Input
+              value={aisle}
+              onChange={(e) => setAisle(e.target.value)}
+              placeholder="e.g. 7"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs text-[var(--text-muted)] block mb-1">
+              Shelf / section
+            </label>
+            <Input
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              placeholder="e.g. top shelf, end cap"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-[var(--text-muted)] block mb-1">
+            Price ($)
+          </label>
+          <Input
+            type="number"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="e.g. 3.49"
+            className="w-32"
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() =>
+              onSave({
+                aisle: aisle.trim() || undefined,
+                section: section.trim() || undefined,
+                price: price.trim() === "" ? null : Number(price),
+              })
+            }
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

@@ -3,24 +3,26 @@
 import { useEffect } from "react";
 
 /**
- * Registers the offline-shell service worker once, after load. Rendered near
- * the root so the PWA works on every page. No-ops where service workers aren't
- * supported (e.g. older browsers, non-secure contexts).
+ * Service-worker JANITOR (not a registrar). A previously-installed caching SW
+ * could pin stale builds and blank the page after redeploys, so during active
+ * development we keep the app network-only: whenever it loads, unregister any
+ * existing service worker and drop its caches. This self-heals devices and
+ * prevents the whole class of "stuck on an old build" problems.
  */
 export function ServiceWorkerRegister() {
   useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }
-    const register = () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
-        // Registration failures are non-fatal — the app still works online.
-      });
-    };
-    if (document.readyState === "complete") register();
-    else {
-      window.addEventListener("load", register);
-      return () => window.removeEventListener("load", register);
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => regs.forEach((r) => r.unregister()))
+      .catch(() => {});
+    if (typeof caches !== "undefined") {
+      caches
+        .keys()
+        .then((keys) => keys.forEach((k) => caches.delete(k)))
+        .catch(() => {});
     }
   }, []);
 

@@ -11,6 +11,7 @@ import {
   Globe2,
   Plus,
   Sparkles,
+  Utensils,
 } from "lucide-react";
 import { matchRecipeAgainstPantry, useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
@@ -210,6 +211,25 @@ export default function RecipesPage() {
   );
 }
 
+const CUISINE_GRADIENTS: Record<string, string> = {
+  Thai: "linear-gradient(135deg,#f59e0b,#16a34a)",
+  Vietnamese: "linear-gradient(135deg,#22c55e,#15803d)",
+  Chinese: "linear-gradient(135deg,#dc2626,#f59e0b)",
+  Korean: "linear-gradient(135deg,#ef4444,#7c3aed)",
+  Indian: "linear-gradient(135deg,#f59e0b,#dc2626)",
+  Nigerian: "linear-gradient(135deg,#16a34a,#ca8a04)",
+  Italian: "linear-gradient(135deg,#16a34a,#dc2626)",
+  French: "linear-gradient(135deg,#2563eb,#7c3aed)",
+  American: "linear-gradient(135deg,#2563eb,#16a34a)",
+  "Latin American": "linear-gradient(135deg,#f59e0b,#16a34a)",
+};
+
+function cuisineGradient(cuisine: string): string {
+  return (
+    CUISINE_GRADIENTS[cuisine] ?? "linear-gradient(135deg,#16a34a,#15803d)"
+  );
+}
+
 function RecipeCard({
   recipe,
   have,
@@ -232,7 +252,7 @@ function RecipeCard({
   const [open, setOpen] = useState(false);
   return (
     <Card id={recipe.id} className="flex flex-col p-0 overflow-hidden">
-      {recipe.imageUrl && (
+      {recipe.imageUrl ? (
         <div className="relative aspect-[16/9] bg-[var(--bg)]">
           <Image
             src={recipe.imageUrl}
@@ -245,6 +265,23 @@ function RecipeCard({
           {recipe.savedId && (
             <div className="absolute top-2 right-2">
               <Badge tone="info" className="bg-black/50 text-white border-0">
+                <BookmarkCheck className="size-3" /> Saved
+              </Badge>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div
+          className="relative aspect-[16/9] grid place-items-center text-white"
+          style={{ backgroundImage: cuisineGradient(recipe.cuisine) }}
+        >
+          <Utensils className="size-9 opacity-90" />
+          <span className="absolute bottom-2 left-3 text-xs font-medium opacity-90">
+            {recipe.cuisine}
+          </span>
+          {recipe.savedId && (
+            <div className="absolute top-2 right-2">
+              <Badge tone="info" className="bg-black/40 text-white border-0">
                 <BookmarkCheck className="size-3" /> Saved
               </Badge>
             </div>

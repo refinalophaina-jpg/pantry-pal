@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AI weekly meal-plan generator:** Claude assigns your recipes across a 1–2 week
   span by preferences (`generate-meal-plan` Edge Function), capped at 10/day per
   household via an `ai_usage` table.
+- **Stores & aisle-ordered shopping:** add your stores (Walmart, H-E-B, Whole
+  Foods, Central Market…); pick one to sort the shopping list by aisle, record
+  each item's aisle/shelf/price (remembered per store via `stores` +
+  `item_locations` tables), and open a "find near 77056" maps link.
 
 ### Fixed
 - **Service worker no longer serves stale builds** — switched to network-first

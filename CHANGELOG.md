@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Changes land here before the next tagged release._
+
+## [0.3.0] — 2026-05-29
+
+The "make it a real cooking hub" release: a much bigger recipe database, AI photo
+recognition and meal planning, a shopping list driven by your plan + pantry, and
+your own stores with aisle layouts. Also fixes the stale-build issue that made
+the app feel broken.
+
 ### Added
 - **Photo → ingredients (AI):** snap/upload a photo of groceries or a fridge and
   Claude Haiku lists the items, which you confirm (editable name + category,
@@ -92,6 +101,7 @@ Initial release.
 - **Explore** tab powered by TheMealDB; built-in + cached nutrition estimates.
 - Static export build and Cloudflare Pages deployment.
 
-[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/refinalophaina-jpg/pantry-pal/releases/tag/v0.1.0

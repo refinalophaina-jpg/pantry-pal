@@ -175,8 +175,10 @@ export default function ExplorePage() {
         </Grid>
       ) : visibleCards.length === 0 ? (
         <Card className="text-center py-12">
-          <p className="text-sm text-[var(--text-muted)]">
-            Nothing here yet. Try another cuisine, or hit Surprise me.
+          <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
+            The free recipe catalog doesn&apos;t have dishes for this region.
+            Try the <strong>search box</strong> above (it has the widest
+            coverage), pick another cuisine, or hit <strong>Surprise me</strong>.
           </p>
         </Card>
       ) : (

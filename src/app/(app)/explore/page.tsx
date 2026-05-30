@@ -1,80 +1,58 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Search, Shuffle, Globe2 } from "lucide-react";
 import {
-  filterByArea,
-  listAreas,
-  lookupMeal,
-  randomMeals,
-  searchByName,
-  type MealDBCardItem,
-} from "@/lib/mealdb";
+  searchRecipes,
+  randomRecipes,
+  SPOONACULAR_CUISINES,
+} from "@/lib/spoonacular";
 import type { Recipe } from "@/lib/types";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { RecipeDetail } from "@/components/recipe-detail";
 import { useToast } from "@/components/toast";
 
-// Curated short-list of the most cooked cuisines; full list comes from the API.
-const FEATURED = [
-  "Italian",
-  "Mexican",
-  "Indian",
-  "Chinese",
-  "Japanese",
-  "Thai",
-  "French",
-  "Greek",
-  "Moroccan",
-  "American",
-  "British",
-  "Vietnamese",
-];
-
-type CardWithMeta = MealDBCardItem & { area?: string };
-
 export default function ExplorePage() {
-  const [areas, setAreas] = useState<string[]>([]);
   const [active, setActive] = useState<string | "discover">("discover");
-  const [cards, setCards] = useState<CardWithMeta[]>([]);
+  const [cards, setCards] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Recipe[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState<Recipe | null>(null);
   const { toast } = useToast();
 
+  // Load discover / cuisine browse whenever the active chip changes.
   useEffect(() => {
-    listAreas().then(setAreas).catch(() => {});
-  }, []);
-
-  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
+    setError(null);
     setSearchResults(null);
-    if (active === "discover") {
-      randomMeals(12)
-        .then((r) =>
-          setCards(
-            r.map((rec) => ({
-              idMeal: rec.externalId!,
-              strMeal: rec.name,
-              strMealThumb: rec.imageUrl ?? "",
-              area: rec.area,
-            })),
-          ),
-        )
-        .catch(() => setCards([]))
-        .finally(() => setLoading(false));
-    } else {
-      filterByArea(active)
-        .then((r) =>
-          setCards(r.map((c) => ({ ...c, area: active }))),
-        )
-        .catch(() => setCards([]))
-        .finally(() => setLoading(false));
-    }
+    const load =
+      active === "discover"
+        ? randomRecipes(12)
+        : searchRecipes({ cuisine: active, number: 12 });
+    load
+      .then((r) => {
+        if (!cancelled) setCards(r);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setCards([]);
+          setError(
+            e instanceof Error ? e.message : "Couldn't load recipes.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [active]);
 
   async function onSearch() {
@@ -84,30 +62,28 @@ export default function ExplorePage() {
       return;
     }
     setSearching(true);
+    setError(null);
     try {
-      const results = await searchByName(q);
+      const results = await searchRecipes({ query: q, number: 16 });
       setSearchResults(results);
-    } catch {
-      // Surface the failure instead of silently snapping back to the grid.
+    } catch (e) {
       setSearchResults([]);
-      toast("Search failed — check your connection and try again.", "warn");
+      toast(
+        e instanceof Error ? e.message : "Search failed — try again.",
+        "warn",
+      );
     } finally {
       setSearching(false);
     }
   }
 
-  async function openCard(id: string) {
-    const recipe = await lookupMeal(id);
-    if (recipe) setOpen(recipe);
-  }
-
-  const visibleCards = useMemo(() => cards, [cards]);
+  const shown = searchResults ?? cards;
 
   return (
     <div>
       <PageHeader
         title="Explore"
-        subtitle="Cook across cultures — recipes from TheMealDB, with images and videos."
+        subtitle="Thousands of recipes across every cuisine — with ingredients, steps, and nutrition."
         actions={
           <Button
             size="sm"
@@ -123,7 +99,7 @@ export default function ExplorePage() {
         <div className="relative flex-1">
           <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <Input
-            placeholder="Search dishes — e.g. arrabiata, tagine, ramen…"
+            placeholder="Search any dish — e.g. pho, butter chicken, ratatouille…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
@@ -137,60 +113,47 @@ export default function ExplorePage() {
 
       <div className="flex gap-2 overflow-x-auto pb-3 -mx-4 px-4 sm:mx-0 sm:px-0 mb-6 no-scrollbar">
         <Chip
-          active={active === "discover"}
+          active={active === "discover" && !searchResults}
           onClick={() => setActive("discover")}
         >
           <Shuffle className="size-3.5" /> Discover
         </Chip>
-        {(areas.length > 0 ? areas : FEATURED).map((a) => (
-          <Chip key={a} active={active === a} onClick={() => setActive(a)}>
-            <Globe2 className="size-3.5" /> {a}
+        {SPOONACULAR_CUISINES.map((c) => (
+          <Chip
+            key={c}
+            active={active === c && !searchResults}
+            onClick={() => setActive(c)}
+          >
+            <Globe2 className="size-3.5" /> {c}
           </Chip>
         ))}
       </div>
 
-      {searchResults ? (
-        <>
-          <h2 className="text-sm text-[var(--text-muted)] mb-3">
-            {searchResults.length} result{searchResults.length === 1 ? "" : "s"}{" "}
-            for &ldquo;{query}&rdquo;
-          </h2>
-          <Grid>
-            {searchResults.map((r) => (
-              <RecipeCard
-                key={r.id}
-                title={r.name}
-                area={r.area}
-                image={r.imageUrl}
-                onClick={() => setOpen(r)}
-              />
-            ))}
-          </Grid>
-        </>
-      ) : loading ? (
+      {searchResults && (
+        <h2 className="text-sm text-[var(--text-muted)] mb-3">
+          {searchResults.length} result{searchResults.length === 1 ? "" : "s"}{" "}
+          for &ldquo;{query}&rdquo;
+        </h2>
+      )}
+
+      {loading ? (
         <Grid>
           {Array.from({ length: 8 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </Grid>
-      ) : visibleCards.length === 0 ? (
+      ) : shown.length === 0 ? (
         <Card className="text-center py-12">
           <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
-            The free recipe catalog doesn&apos;t have dishes for this region.
-            Try the <strong>search box</strong> above (it has the widest
-            coverage), pick another cuisine, or hit <strong>Surprise me</strong>.
+            {error
+              ? error
+              : "No recipes found. Try a different search or cuisine."}
           </p>
         </Card>
       ) : (
         <Grid>
-          {visibleCards.map((c) => (
-            <RecipeCard
-              key={c.idMeal}
-              title={c.strMeal}
-              area={c.area}
-              image={c.strMealThumb}
-              onClick={() => openCard(c.idMeal)}
-            />
+          {shown.map((r) => (
+            <RecipeCard key={r.id} recipe={r} onClick={() => setOpen(r)} />
           ))}
         </Grid>
       )}
@@ -232,14 +195,10 @@ function Grid({ children }: { children: React.ReactNode }) {
 }
 
 function RecipeCard({
-  title,
-  area,
-  image,
+  recipe,
   onClick,
 }: {
-  title: string;
-  area?: string;
-  image?: string;
+  recipe: Recipe;
   onClick: () => void;
 }) {
   return (
@@ -248,10 +207,10 @@ function RecipeCard({
       className="text-left group rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden hover:border-[var(--accent)] transition-colors cursor-pointer"
     >
       <div className="relative aspect-square overflow-hidden bg-[var(--bg)]">
-        {image ? (
+        {recipe.imageUrl ? (
           <Image
-            src={image}
-            alt={title}
+            src={recipe.imageUrl}
+            alt={recipe.name}
             fill
             sizes="(max-width: 640px) 50vw, 25vw"
             className="object-cover group-hover:scale-105 transition-transform duration-300"
@@ -265,13 +224,16 @@ function RecipeCard({
       </div>
       <div className="p-3">
         <div className="font-medium text-sm line-clamp-2 group-hover:text-[var(--accent-hover)]">
-          {title}
+          {recipe.name}
         </div>
-        {area && (
-          <Badge tone="default" className="mt-2">
-            {area}
-          </Badge>
-        )}
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
+          {recipe.cuisine && recipe.cuisine !== "International" && (
+            <Badge tone="default">{recipe.cuisine}</Badge>
+          )}
+          <span className="text-xs text-[var(--text-muted)]">
+            {recipe.minutes} min
+          </span>
+        </div>
       </div>
     </button>
   );

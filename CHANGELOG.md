@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 _Changes land here before the next tagged release._
 
 ### Added
+- **AinaDara design system:** the app is reskinned in warm "paper" tones —
+  terracotta / purple / moss accents, DM Serif Display titles, Outfit body, a
+  fixed paper-grain overlay and ambient washes. Implemented by repointing the
+  existing semantic CSS variables onto brand tokens, so every page inherits the
+  look. The basket logo and the photo-less recipe header were recoloured to match.
+- **Dark mode + theme toggle:** warm, low-glare dark theme driven by
+  `data-theme`, set before paint to avoid flashes; a sidebar toggle switches and
+  remembers the choice (`pantry-pal-theme`). Honours `prefers-color-scheme` with
+  no JS.
 - **Test infrastructure:** Vitest 3 + Testing Library + jsdom, with `test`,
   `test:watch`, `test:cov`, and `typecheck` scripts. First unit suites cover the
   date/format helpers (`lib/utils`) and nutrition lookup + recipe estimation

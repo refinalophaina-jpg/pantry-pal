@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { Button, Modal } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/toast";
 
 const nav = [
@@ -75,6 +76,7 @@ export function Sidebar() {
         })}
       </nav>
       <div className="p-4 border-t border-[var(--border)] space-y-2">
+        <ThemeToggle />
         {household && (
           <button
             onClick={() => setShowInvite(true)}

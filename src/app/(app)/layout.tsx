@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { DataSync } from "@/lib/data-sync";
 import { Sidebar, MobileNav } from "@/components/sidebar";
+import { CommandPalette } from "@/components/command-palette";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { loading, user, household } = useAuth();
@@ -26,6 +27,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <DataSync>
+      <CommandPalette />
       <div className="flex min-h-screen">
         <Sidebar />
         <main className="flex-1 px-4 sm:px-8 py-6 lg:py-10 pb-24 lg:pb-10 max-w-[1400px] mx-auto w-full">

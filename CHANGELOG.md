@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 _Changes land here before the next tagged release._
 
 ### Added
+- **Command palette (⌘K / Ctrl+K):** app-wide quick navigation and actions with
+  fuzzy filtering and full keyboard control (arrows, Enter, Escape) — jump to any
+  page or toggle the theme.
 - **Learn page:** a new surface that presents the cooking guides — searchable,
   grouped by category, with expandable step-by-step instructions (difficulty +
   time). Added to the sidebar and mobile nav.

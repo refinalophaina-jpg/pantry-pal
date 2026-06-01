@@ -24,6 +24,10 @@ import {
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
+import {
+  IngredientAutocomplete,
+  pantryCategoryFor,
+} from "@/components/ingredient-autocomplete";
 import { useToast } from "@/components/toast";
 import { useAction } from "@/lib/use-action";
 import { expiryStatus, uid } from "@/lib/utils";
@@ -288,11 +292,15 @@ function AddItemModal({
   return (
     <Modal open={open} onClose={onClose} title="Add pantry item">
       <div className="space-y-3">
-        <Input
+        <IngredientAutocomplete
           autoFocus
           placeholder="e.g. Chicken breast"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={setName}
+          onSelect={(ing) => {
+            setName(ing.name);
+            setCategory(pantryCategoryFor(ing.category));
+          }}
         />
         <div className="grid grid-cols-2 gap-3">
           <Input

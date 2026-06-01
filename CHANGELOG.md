@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 _Changes land here before the next tagged release._
 
 ### Added
+- **Ingredient autocomplete:** the pantry add-form now suggests canonical
+  ingredients as you type (typo-tolerant, via `search_ingredients`), and picking
+  one auto-fills the category. Keyboard-navigable, accessible, fails soft
+  offline.
+- Nutrition estimation now resolves per-100 g data from the canonical
+  `ingredients` corpus (builtin → DB → cache), inheriting `grams_per_piece` for
+  accurate piece-based scaling.
 - **Food consortium (data layer):** new public-read reference tables —
   `ingredients` (canonical, alias-matched, per-100 g nutrition), `foods`
   (branded/barcode products), `techniques` (cooking guides), and

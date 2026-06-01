@@ -66,17 +66,21 @@ Camera permission lives in `android/app/src/main/AndroidManifest.xml`:
 <uses-feature android:name="android.hardware.camera" android:required="false" />
 ```
 
-## Desktop (Tauri — planned)
+## Desktop (Tauri)
 
-Tauri wraps the same `out/` export in a native webview, producing small signed
-binaries. The Rust toolchain is present in this environment; wiring is tracked in
-the roadmap (Phase 4).
+Tauri wraps the same `out/` export in a native webview (WKWebView on macOS,
+WebView2 on Windows, WebKitGTK on Linux), producing small signed binaries.
+Requires the Rust toolchain (`rustup`); the project lives in `src-tauri/`.
 
 ```bash
-# planned
-npm run tauri:dev
-npm run tauri:build        # -> src-tauri/target/release/bundle/
+npm run tauri:dev          # runs `npm run dev` + opens the desktop window
+npm run tauri:build        # builds the web app, then bundles ->
+                           #   src-tauri/target/release/bundle/
 ```
+
+Config: `src-tauri/tauri.conf.json` (identifier `com.ainadara.pantrypal`,
+`frontendDist: ../out`, warm-paper window). Linux builds need the system
+WebKitGTK + libsoup dev packages; macOS/Windows use the built-in webview.
 
 ---
 

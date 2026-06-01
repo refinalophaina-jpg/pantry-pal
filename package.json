@@ -12,7 +12,10 @@
     "test:cov": "vitest run --coverage",
     "cap:sync": "next build && cap sync",
     "cap:ios": "next build && cap sync ios && cap open ios",
-    "cap:android": "next build && cap sync android && cap open android"
+    "cap:android": "next build && cap sync android && cap open android",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -34,6 +37,7 @@
     "@capacitor/core": "^8.3.4",
     "@capacitor/ios": "^8.3.4",
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.11.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

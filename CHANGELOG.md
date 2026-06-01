@@ -26,6 +26,11 @@ _Changes land here before the next tagged release._
   typed client. Ships a curated seed (~32 ingredients, 5 techniques); importers
   in `scripts/` load USDA FoodData Central → ingredients and Open Food Facts →
   foods. Migration validated against a throwaway Postgres 16 + pg_trgm.
+- **Desktop app (Tauri):** the static export now also runs as a native desktop
+  app via Tauri 2 (`src-tauri/`, identifier `com.ainadara.pantrypal`,
+  warm-paper window). `npm run tauri:dev` / `tauri:build`. The Rust shell
+  compiles clean (`cargo check`). With this, Pantry Pal targets web, iOS,
+  Android, and desktop from one codebase.
 - **Native packaging (Capacitor):** the static export now wraps into native iOS
   and Android shells via Capacitor 8 (`capacitor.config.ts`, `cap:sync` /
   `cap:ios` / `cap:android` scripts). `PACKAGING.md` documents the build path for

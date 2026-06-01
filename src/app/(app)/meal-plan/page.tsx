@@ -25,7 +25,8 @@ export default function MealPlanPage() {
   const recipes = useAppStore((s) => s.recipes);
   const savedRecipes = useAppStore((s) => s.savedRecipes);
   const mealPlan = useAppStore((s) => s.mealPlan);
-  const { addMealPlan, removeMealPlan, generateMealPlan } = useSyncedActions();
+  const { addMealPlan, removeMealPlan, moveMealPlan, generateMealPlan } =
+    useSyncedActions();
   const run = useAction();
   const { toast } = useToast();
 
@@ -33,6 +34,25 @@ export default function MealPlanPage() {
   const [addContext, setAddContext] = useState<
     null | { date: string; meal: (typeof MEALS)[number] }
   >(null);
+
+  // Drag-and-drop: id of the entry being dragged, and the slot hovered over.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
+
+  function handleDrop(
+    e: React.DragEvent,
+    date: string,
+    meal: (typeof MEALS)[number],
+  ) {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain") || dragId;
+    setDragId(null);
+    setOverKey(null);
+    if (!id) return;
+    run(() => moveMealPlan(id, { date, meal }), {
+      error: "Couldn't move the meal — try again.",
+    });
+  }
 
   // AI generator state
   const [genOpen, setGenOpen] = useState(false);
@@ -101,7 +121,7 @@ export default function MealPlanPage() {
     <div>
       <PageHeader
         title="Meal plan"
-        subtitle="Generate a week with AI, or build it yourself slot by slot."
+        subtitle="Generate a week with AI, or build it yourself — drag meals between slots to rearrange."
         actions={
           <div className="flex gap-2 flex-wrap">
             <Button size="sm" onClick={() => setGenOpen(true)} disabled={!mounted}>
@@ -173,6 +193,15 @@ export default function MealPlanPage() {
                 })
               }
               recipes={recipes}
+              dragId={dragId}
+              overKey={overKey}
+              onDragStartEntry={setDragId}
+              onDragEndEntry={() => {
+                setDragId(null);
+                setOverKey(null);
+              }}
+              onOver={setOverKey}
+              onDrop={handleDrop}
             />
           ))}
         </div>
@@ -304,6 +333,12 @@ function Row({
   onAdd,
   onRemove,
   recipes,
+  dragId,
+  overKey,
+  onDragStartEntry,
+  onDragEndEntry,
+  onOver,
+  onDrop,
 }: {
   meal: (typeof MEALS)[number];
   days: { date: string; label: string; short: string }[];
@@ -311,6 +346,16 @@ function Row({
   onAdd: (date: string) => void;
   onRemove: (id: string) => void;
   recipes: ReturnType<typeof useAppStore.getState>["recipes"];
+  dragId: string | null;
+  overKey: string | null;
+  onDragStartEntry: (id: string) => void;
+  onDragEndEntry: () => void;
+  onOver: (key: string | null) => void;
+  onDrop: (
+    e: React.DragEvent,
+    date: string,
+    meal: (typeof MEALS)[number],
+  ) => void;
 }) {
   return (
     <>
@@ -321,10 +366,25 @@ function Row({
         const entries = mealPlan.filter(
           (m) => m.date === d.date && m.meal === meal,
         );
+        const key = `${d.date}|${meal}`;
+        const isOver = overKey === key && dragId !== null;
         return (
           <div
             key={d.date + meal}
-            className="p-2 border-b border-l border-[var(--border)] min-h-[80px] flex flex-col gap-1.5"
+            onDragOver={(e) => {
+              if (dragId) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                onOver(key);
+              }
+            }}
+            onDragLeave={() => onOver(null)}
+            onDrop={(e) => onDrop(e, d.date, meal)}
+            className={`p-2 border-b border-l min-h-[80px] flex flex-col gap-1.5 transition-colors ${
+              isOver
+                ? "border-[var(--terracotta-q)] bg-[var(--accent-soft)]"
+                : "border-[var(--border)]"
+            }`}
           >
             {entries.map((e) => {
               const recipe = recipes.find((r) => r.id === e.recipeId);
@@ -332,7 +392,16 @@ function Row({
               return (
                 <div
                   key={e.id}
-                  className="text-xs rounded-md bg-[var(--accent-soft)] text-[var(--accent-hover)] px-2 py-1 flex items-start justify-between gap-1 group"
+                  draggable
+                  onDragStart={(ev) => {
+                    ev.dataTransfer.setData("text/plain", e.id);
+                    ev.dataTransfer.effectAllowed = "move";
+                    onDragStartEntry(e.id);
+                  }}
+                  onDragEnd={onDragEndEntry}
+                  className={`text-xs rounded-md bg-[var(--accent-soft)] text-[var(--accent-hover)] px-2 py-1 flex items-start justify-between gap-1 group cursor-grab active:cursor-grabbing ${
+                    dragId === e.id ? "opacity-40" : ""
+                  }`}
                 >
                   <span className="leading-tight">{recipe.name}</span>
                   <button

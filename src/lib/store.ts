@@ -88,6 +88,11 @@ interface AppState {
     ctx: SyncedActionsCtx,
   ) => Promise<void>;
   removeMealPlan: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
+  moveMealPlan: (
+    id: string,
+    target: { date: string; meal: MealPlanEntry["meal"] },
+    ctx: SyncedActionsCtx,
+  ) => Promise<void>;
   generateMealPlan: (
     opts: { dates: string[]; meals: string[]; preferences: string },
     ctx: SyncedActionsCtx,
@@ -583,6 +588,29 @@ export const useAppStore = create<AppState>()(
           .eq("household_id", ctx.householdId);
         if (error) throw error;
         get()._removeMealPlan(id);
+      },
+
+      moveMealPlan: async (id, target, ctx) => {
+        const existing = get().mealPlan.find((m) => m.id === id);
+        if (!existing) return;
+        // No-op if dropped on its own slot.
+        if (existing.date === target.date && existing.meal === target.meal) {
+          return;
+        }
+        // Optimistic move; reconcile from the DB row (or revert on failure).
+        get()._upsertMealPlan({ ...existing, ...target });
+        const { data, error } = await supa()
+          .from("meal_plan")
+          .update({ date: target.date, meal: target.meal })
+          .eq("id", id)
+          .eq("household_id", ctx.householdId)
+          .select()
+          .single();
+        if (error || !data) {
+          get()._upsertMealPlan(existing); // revert
+          throw error ?? new Error("Meal plan move failed");
+        }
+        get()._upsertMealPlan(mealPlanFromRow(data as MealPlanRow));
       },
 
       // Ask Claude (server-side, capped) to assign known recipes across the given

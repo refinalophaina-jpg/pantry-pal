@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes land here before the next tagged release._
 
+### Added
+- **Drag-and-drop meal planning:** drag a meal between any slots in the weekly
+  grid to rearrange it (native HTML5 DnD, no new deps). Optimistic move with a
+  single `meal_plan` row update and revert-on-failure; the dragged chip dims and
+  the target slot highlights. New `moveMealPlan` store action + synced wrapper,
+  covered by tests (move, same-slot no-op, error revert).
+
 ## [0.4.0] — 2026-06-01
 
 The "platform & data" release: Pantry Pal now runs on web, iOS, Android, and

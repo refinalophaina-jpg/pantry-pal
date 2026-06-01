@@ -209,3 +209,60 @@ describe("store Supabase-backed actions", () => {
     expect(useAppStore.getState().usage[0].reason).toBe("wasted");
   });
 });
+
+describe("moveMealPlan", () => {
+  const entry = {
+    id: "m1",
+    date: "2026-06-01",
+    meal: "dinner" as const,
+    recipeId: "r1",
+  };
+
+  it("moves an entry to a new slot and reconciles from the DB row", async () => {
+    useAppStore.setState({ mealPlan: [entry] });
+    h.state.resultsByTable.meal_plan = {
+      data: {
+        id: "m1",
+        household_id: "h1",
+        date: "2026-06-02",
+        meal: "lunch",
+        recipe_id: "r1",
+      },
+      error: null,
+    };
+    await useAppStore
+      .getState()
+      .moveMealPlan("m1", { date: "2026-06-02", meal: "lunch" }, ctx);
+    const m = useAppStore.getState().mealPlan;
+    expect(m).toHaveLength(1);
+    expect(m[0].date).toBe("2026-06-02");
+    expect(m[0].meal).toBe("lunch");
+    expect(h.state.calls.some((c) => c[0] === "update")).toBe(true);
+  });
+
+  it("is a no-op when dropped on its own slot (no DB call)", async () => {
+    useAppStore.setState({ mealPlan: [entry] });
+    await useAppStore
+      .getState()
+      .moveMealPlan("m1", { date: "2026-06-01", meal: "dinner" }, ctx);
+    expect(h.state.calls.some((c) => c[0] === "update")).toBe(false);
+    expect(useAppStore.getState().mealPlan[0].date).toBe("2026-06-01");
+  });
+
+  it("reverts the optimistic move on error", async () => {
+    useAppStore.setState({ mealPlan: [entry] });
+    h.state.resultsByTable.meal_plan = {
+      data: null,
+      error: { message: "denied" },
+    };
+    await expect(
+      useAppStore
+        .getState()
+        .moveMealPlan("m1", { date: "2026-06-03", meal: "breakfast" }, ctx),
+    ).rejects.toBeTruthy();
+    // reverted to the original slot
+    const m = useAppStore.getState().mealPlan;
+    expect(m[0].date).toBe("2026-06-01");
+    expect(m[0].meal).toBe("dinner");
+  });
+});

@@ -205,6 +205,10 @@ export function useSyncedActions() {
     addMealPlan: (entry: Parameters<typeof store.addMealPlan>[0]) =>
       store.addMealPlan(entry, ctx),
     removeMealPlan: (id: string) => store.removeMealPlan(id, ctx),
+    moveMealPlan: (
+      id: string,
+      target: Parameters<typeof store.moveMealPlan>[1],
+    ) => store.moveMealPlan(id, target, ctx),
     generateMealPlan: (opts: {
       dates: string[];
       meals: string[];

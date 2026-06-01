@@ -98,7 +98,7 @@ export function Badge({
 }) {
   const tones: Record<string, string> = {
     default: "bg-[var(--bg)] text-[var(--text-muted)]",
-    fresh: "bg-[var(--accent-soft)] text-[var(--accent-hover)]",
+    fresh: "bg-[var(--fresh-soft)] text-[var(--fresh)]",
     soon: "bg-[var(--warn-soft)] text-[var(--warn)]",
     today: "bg-[var(--warn-soft)] text-[var(--warn)]",
     expired: "bg-[var(--danger-soft)] text-[var(--danger)]",

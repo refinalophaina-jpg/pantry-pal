@@ -1,22 +1,127 @@
 @import "tailwindcss";
 
+/*
+ * AinaDara design system, applied to Pantry Pal.
+ *
+ * Two layers of variables:
+ *  1. Raw brand tokens (--paper, --ink, --terracotta, --purple, --moss …).
+ *  2. Semantic app tokens (--bg, --surface, --accent …) that every component
+ *     already consumes via `bg-[var(--surface)]` etc. We repoint these onto the
+ *     brand tokens, so the whole app reskins without touching components.
+ *
+ * Warm paper, terracotta/purple/moss accents, DM Serif + Outfit type, a fixed
+ * paper-grain overlay and three ambient washes. Dark mode is warm + low-glare,
+ * toggled by `data-theme` on <html> (set before paint by the head init script).
+ */
+
 :root {
-  --bg: #f7f7f4;
-  --surface: #ffffff;
-  --border: #e7e5e0;
-  --text: #1a1a1a;
-  --text-muted: #6b6b6b;
-  --accent: #16a34a;
-  --accent-hover: #15803d;
-  --accent-soft: #dcfce7;
-  --warn: #d97706;
-  --warn-soft: #fef3c7;
-  --danger: #dc2626;
-  --danger-soft: #fee2e2;
-  --info: #2563eb;
-  --info-soft: #dbeafe;
+  /* ---- Brand tokens (light) ---- */
+  --paper: #faf5ed;
+  --paper-deep: #f2ecdf;
+  --paper-edge: #e8e0d0;
+  --ink: #2d3428;
+  --ink-soft: #5a6151;
+  --ink-faint: #8a8e80;
+  --terracotta: #cc785c;
+  --terracotta-q: #e0a98c;
+  --purple: #4a3d7a;
+  --moss: #4a5c28;
+  --rule: rgba(45, 52, 40, 0.1);
+
+  /* ---- Semantic app tokens (consumed across the app) ---- */
+  --bg: var(--paper-deep);
+  --surface: #fdf9f1; /* lifts a touch above the page */
+  --border: var(--paper-edge);
+  --text: var(--ink);
+  --text-muted: var(--ink-soft);
+  --text-faint: var(--ink-faint);
+
+  --accent: var(--terracotta);
+  --accent-hover: #b5634a;
+  --accent-soft: #f5e3da;
+
+  /* success / freshness reads as moss, not coral */
+  --fresh: var(--moss);
+  --fresh-soft: #e4ead5;
+
+  --warn: #b07229;
+  --warn-soft: #f3e6cc;
+  --danger: #bb4a37;
+  --danger-soft: #f4ddd5;
+  --info: var(--purple);
+  --info-soft: #e7e2f1;
 }
 
+:root[data-theme="dark"] {
+  --paper: #1c1815;
+  --paper-deep: #252119;
+  --paper-edge: #322d24;
+  --ink: #ece4d2;
+  --ink-soft: #b8af9d;
+  --ink-faint: #7d7666;
+  --terracotta: #d88a6e;
+  --terracotta-q: #b56e54;
+  --purple: #8e7dc8;
+  --moss: #9aad68;
+  --rule: rgba(236, 228, 210, 0.1);
+
+  --bg: var(--paper);
+  --surface: var(--paper-deep);
+  --border: var(--paper-edge);
+  --text: var(--ink);
+  --text-muted: var(--ink-soft);
+  --text-faint: var(--ink-faint);
+
+  --accent: var(--terracotta);
+  --accent-hover: #e6a085;
+  --accent-soft: #3a2b22;
+
+  --fresh: var(--moss);
+  --fresh-soft: #2a3320;
+
+  --warn: #d99a52;
+  --warn-soft: #3a2e1c;
+  --danger: #e08a72;
+  --danger-soft: #3a221c;
+  --info: var(--purple);
+  --info-soft: #2c2640;
+}
+
+/* No-JS fallback: honour the OS preference until the init script runs. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --paper: #1c1815;
+    --paper-deep: #252119;
+    --paper-edge: #322d24;
+    --ink: #ece4d2;
+    --ink-soft: #b8af9d;
+    --ink-faint: #7d7666;
+    --terracotta: #d88a6e;
+    --terracotta-q: #b56e54;
+    --purple: #8e7dc8;
+    --moss: #9aad68;
+    --rule: rgba(236, 228, 210, 0.1);
+    --bg: var(--paper);
+    --surface: var(--paper-deep);
+    --border: var(--paper-edge);
+    --text: var(--ink);
+    --text-muted: var(--ink-soft);
+    --text-faint: var(--ink-faint);
+    --accent: var(--terracotta);
+    --accent-hover: #e6a085;
+    --accent-soft: #3a2b22;
+    --fresh: var(--moss);
+    --fresh-soft: #2a3320;
+    --warn: #d99a52;
+    --warn-soft: #3a2e1c;
+    --danger: #e08a72;
+    --danger-soft: #3a221c;
+    --info: var(--purple);
+    --info-soft: #2c2640;
+  }
+}
+
+/* Expose tokens to Tailwind's color/font utilities. */
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--text);
@@ -25,22 +130,12 @@
   --color-muted: var(--text-muted);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f0f0e;
-    --surface: #1a1a18;
-    --border: #2a2a26;
-    --text: #ededed;
-    --text-muted: #9a9994;
-    --accent: #22c55e;
-    --accent-hover: #16a34a;
-    --accent-soft: #052e16;
-    --warn-soft: #422006;
-    --danger-soft: #450a0a;
-    --info-soft: #172554;
-  }
+  --color-terracotta: var(--terracotta);
+  --color-purple: var(--purple);
+  --color-moss: var(--moss);
+  --font-sans: var(--font-outfit), system-ui, sans-serif;
+  --font-display: var(--font-display-face), Georgia, serif;
+  --font-mono: var(--font-mono-face), ui-monospace, monospace;
 }
 
 * {
@@ -51,13 +146,96 @@ html,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
-    system-ui, sans-serif;
+  font-family: var(--font-outfit), -apple-system, BlinkMacSystemFont, system-ui,
+    sans-serif;
+  font-weight: 300;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   min-height: 100vh;
+  position: relative;
+}
+
+/* Ambient warmth: three layered radial washes behind everything. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 1200px 800px at 15% 10%,
+      rgba(204, 120, 92, 0.05),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 900px 700px at 85% 70%,
+      rgba(74, 61, 122, 0.03),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 800px 600px at 50% 100%,
+      rgba(74, 92, 40, 0.025),
+      transparent 60%
+    );
+}
+
+[data-theme="dark"] body::before {
+  background:
+    radial-gradient(
+      ellipse 1200px 800px at 15% 10%,
+      rgba(216, 138, 110, 0.08),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 900px 700px at 85% 70%,
+      rgba(142, 125, 200, 0.06),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 800px 600px at 50% 100%,
+      rgba(154, 173, 104, 0.04),
+      transparent 60%
+    );
+}
+
+/* Paper grain: a fixed fractal-noise overlay above content, very subtle. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch' seed='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+[data-theme="dark"] body::after {
+  opacity: 0.04;
+  mix-blend-mode: screen;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Display type for top-level titles — the signature of the look. */
+h1,
+h2,
+.font-display {
+  font-family: var(--font-display-face), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.font-mono {
+  font-family: var(--font-mono-face), ui-monospace, monospace;
 }
 
 input,
@@ -65,6 +243,28 @@ select,
 textarea,
 button {
   font-family: inherit;
+}
+
+::selection {
+  background: var(--terracotta);
+  color: var(--paper);
+}
+
+/* SVG brand-mark colour auto-flip in dark mode (matches AinaDara). */
+[data-theme="dark"] svg [stroke="#cc785c"] {
+  stroke: var(--terracotta);
+}
+[data-theme="dark"] svg [fill="#cc785c"] {
+  fill: var(--terracotta);
+}
+[data-theme="dark"] svg [stroke="#4a3d7a"] {
+  stroke: var(--purple);
+}
+[data-theme="dark"] svg [fill="#4a3d7a"] {
+  fill: var(--purple);
+}
+[data-theme="dark"] svg [stroke="#4a5c28"] {
+  stroke: var(--moss);
 }
 
 /* Scrollbar polish */

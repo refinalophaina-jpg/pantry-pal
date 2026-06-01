@@ -168,7 +168,7 @@ export function RecipeDetail({
             className="relative overflow-hidden rounded-t-2xl px-6 sm:px-8 py-10 text-white"
             style={{
               backgroundImage:
-                "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
+                "linear-gradient(135deg, #cc785c 0%, #4a3d7a 100%)",
             }}
           >
             <ChefHat className="absolute -right-3 -bottom-4 size-32 text-white/10" />

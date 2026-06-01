@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 _Changes land here before the next tagged release._
 
 ### Added
+- **Food consortium (data layer):** new public-read reference tables —
+  `ingredients` (canonical, alias-matched, per-100 g nutrition), `foods`
+  (branded/barcode products), `techniques` (cooking guides), and
+  `recipe_catalog` (shared recipe corpus) — each with full-text **and** trigram
+  search, so lookups tolerate typos and word order. A `search_ingredients` /
+  `search_recipe_catalog` RPC powers autocomplete; `src/lib/food-db.ts` is the
+  typed client. Ships a curated seed (~32 ingredients, 5 techniques); importers
+  in `scripts/` load USDA FoodData Central → ingredients and Open Food Facts →
+  foods. Migration validated against a throwaway Postgres 16 + pg_trgm.
 - **Native packaging (Capacitor):** the static export now wraps into native iOS
   and Android shells via Capacitor 8 (`capacitor.config.ts`, `cap:sync` /
   `cap:ios` / `cap:android` scripts). `PACKAGING.md` documents the build path for

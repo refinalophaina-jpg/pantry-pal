@@ -102,11 +102,25 @@ function normalize(name: string): string {
     .trim();
 }
 
+// Plural → singular candidates. Naive English rules, ordered most→least
+// specific so "tomatoes"→"tomato" wins over the bare "-s" strip "tomatoe".
+function singularForms(n: string): string[] {
+  const forms: string[] = [];
+  if (n.endsWith("oes")) forms.push(n.slice(0, -2)); // tomatoes -> tomato
+  if (n.endsWith("ies")) forms.push(n.slice(0, -3) + "y"); // berries -> berry
+  if (n.endsWith("es")) forms.push(n.slice(0, -2)); // boxes -> box
+  if (n.endsWith("s")) forms.push(n.slice(0, -1)); // eggs -> egg
+  return forms;
+}
+
 function builtinLookup(name: string): Per100 | null {
   const n = normalize(name);
   if (BUILTIN[n]) return BUILTIN[n];
-  // Singular/plural fuzz
-  if (n.endsWith("s") && BUILTIN[n.slice(0, -1)]) return BUILTIN[n.slice(0, -1)];
+  // Plural → singular (handles -s, -es, -oes, -ies).
+  for (const s of singularForms(n)) {
+    if (BUILTIN[s]) return BUILTIN[s];
+  }
+  // Singular → plural (a few table entries are stored only in plural form).
   if (BUILTIN[n + "s"]) return BUILTIN[n + "s"];
   // Last-word match: "olive oil" -> "oil" if we have it
   const last = n.split(" ").pop()!;

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes land here before the next tagged release._
 
+### Added
+- **Test infrastructure:** Vitest 3 + Testing Library + jsdom, with `test`,
+  `test:watch`, `test:cov`, and `typecheck` scripts. First unit suites cover the
+  date/format helpers (`lib/utils`) and nutrition lookup + recipe estimation
+  (`lib/nutrition`).
+- **Continuous integration:** GitHub Actions workflow runs type-check, tests
+  (with coverage), and the production build on every push and PR.
+- **`ROADMAP.md`** — the phased plan toward a cross-platform, data-rich app in
+  the AinaDara design language.
+
+### Fixed
+- Nutrition lookup now resolves `-es`/`-oes`/`-ies` plurals, so ingredients like
+  **tomatoes** and **potatoes** match their per-100 g data (previously only a
+  bare trailing `-s` was stripped, yielding `tomatoe` → no match).
+
 ## [0.3.0] — 2026-05-29
 
 The "make it a real cooking hub" release: a much bigger recipe database, AI photo

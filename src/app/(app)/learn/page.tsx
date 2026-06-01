@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, ChefHat, Clock, ChevronDown } from "lucide-react";
 import { listTechniques, type Technique } from "@/lib/food-db";
-import { Badge, Card, Input } from "@/components/ui";
+import { Badge, Card, Input, Skeleton } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { cn } from "@/lib/utils";
 
@@ -92,7 +92,19 @@ export default function LearnPage() {
       </div>
 
       {loading && (
-        <p className="text-sm text-[var(--text-muted)]">Loading guides…</p>
+        <div
+          className="grid gap-3 sm:grid-cols-2"
+          role="status"
+          aria-label="Loading guides"
+        >
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="space-y-3">
+              <Skeleton className="h-5 w-1/2" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </Card>
+          ))}
+        </div>
       )}
       {error && !loading && (
         <Card className="text-sm text-[var(--danger)]">{error}</Card>

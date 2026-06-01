@@ -294,3 +294,46 @@ button {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Motion: a gentle content entrance + a skeleton shimmer. Both respect
+   prefers-reduced-motion. */
+@keyframes pp-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-in {
+  animation: pp-fade-up 0.35s ease both;
+}
+
+@keyframes pp-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--paper-deep) 25%,
+    var(--paper-edge) 37%,
+    var(--paper-deep) 63%
+  );
+  background-size: 200% 100%;
+  animation: pp-shimmer 1.4s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .skeleton {
+    animation: none;
+  }
+}

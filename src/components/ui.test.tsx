@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Button, Badge, Card, Input, EmptyState, Modal } from "./ui";
+import { Button, Badge, Card, Input, EmptyState, Modal, Skeleton } from "./ui";
 
 describe("Button", () => {
   it("renders children as a button and fires onClick", async () => {
@@ -40,6 +40,16 @@ describe("Badge", () => {
   it("expired tone uses the danger token", () => {
     render(<Badge tone="expired">Expired</Badge>);
     expect(screen.getByText("Expired").className).toContain("var(--danger");
+  });
+});
+
+describe("Skeleton", () => {
+  it("renders a decorative shimmer block", () => {
+    const { container } = render(<Skeleton className="h-4 w-1/2" />);
+    const el = container.querySelector(".skeleton");
+    expect(el).not.toBeNull();
+    expect(el).toHaveClass("h-4", "w-1/2");
+    expect(el).toHaveAttribute("aria-hidden", "true");
   });
 });
 

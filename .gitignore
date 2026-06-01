@@ -37,6 +37,15 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Capacitor native projects — generated from capacitor.config.ts via
+# `npx cap add ios|android` + `npx cap sync`. Regenerable, so not tracked.
+# (When native customisations are added, track those files explicitly.)
+/ios
+/android
+
+# Tauri desktop build output
+/src-tauri/target
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

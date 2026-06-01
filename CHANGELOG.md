@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 _Changes land here before the next tagged release._
 
 ### Added
+- **Native packaging (Capacitor):** the static export now wraps into native iOS
+  and Android shells via Capacitor 8 (`capacitor.config.ts`, `cap:sync` /
+  `cap:ios` / `cap:android` scripts). `PACKAGING.md` documents the build path for
+  web/PWA, iOS, Android, and (planned) Tauri desktop. Native projects are
+  generated, not tracked.
 - **AinaDara design system:** the app is reskinned in warm "paper" tones —
   terracotta / purple / moss accents, DM Serif Display titles, Outfit body, a
   fixed paper-grain overlay and ambient washes. Implemented by repointing the

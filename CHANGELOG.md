@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 _Changes land here before the next tagged release._
 
 ### Added
+- **Learn page:** a new surface that presents the cooking guides — searchable,
+  grouped by category, with expandable step-by-step instructions (difficulty +
+  time). Added to the sidebar and mobile nav.
 - **Ingredient autocomplete:** the pantry add-form now suggests canonical
   ingredients as you type (typo-tolerant, via `search_ingredients`), and picking
   one auto-fills the category. Keyboard-navigable, accessible, fails soft

@@ -16,6 +16,12 @@ _Changes land here before the next tagged release._
   the target slot highlights. New `moveMealPlan` store action + synced wrapper,
   covered by tests (move, same-slot no-op, error revert).
 
+### Fixed
+- **Unsaving a recipe now updates instantly.** `unsaveRecipe` removed by the raw
+  row id, but saved recipes are stored under a `saved-`-prefixed id, so the
+  optimistic local removal never matched (it only cleared once the realtime
+  DELETE arrived). Surfaced by the new store action tests.
+
 ## [0.4.0] — 2026-06-01
 
 The "platform & data" release: Pantry Pal now runs on web, iOS, Android, and

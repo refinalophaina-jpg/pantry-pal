@@ -35,6 +35,9 @@ const h = vi.hoisted(() => {
     eq() {
       return builder;
     },
+    in() {
+      return builder;
+    },
     order() {
       return builder;
     },
@@ -264,5 +267,198 @@ describe("moveMealPlan", () => {
     const m = useAppStore.getState().mealPlan;
     expect(m[0].date).toBe("2026-06-01");
     expect(m[0].meal).toBe("dinner");
+  });
+});
+
+function shoppingRow(over: Record<string, unknown> = {}) {
+  return {
+    id: "s-row",
+    household_id: "h1",
+    name: "Milk",
+    quantity: 1,
+    unit: "l",
+    category: "Dairy",
+    done: false,
+    from_recipe: null,
+    deal_price: null,
+    deal_store: null,
+    ...over,
+  };
+}
+
+describe("store shopping actions", () => {
+  it("addShoppingItem inserts and upserts the mapped row", async () => {
+    h.state.resultsByTable.shopping_items = {
+      data: shoppingRow({ id: "s1", name: "Milk" }),
+      error: null,
+    };
+    await useAppStore.getState().addShoppingItem(
+      { name: "Milk", quantity: 1, unit: "l", category: "Dairy" },
+      ctx,
+    );
+    expect(useAppStore.getState().shopping).toHaveLength(1);
+    expect(useAppStore.getState().shopping[0].name).toBe("Milk");
+  });
+
+  it("toggleShoppingItem flips done from the returned row", async () => {
+    useAppStore.setState({
+      shopping: [
+        {
+          id: "s1",
+          name: "Milk",
+          quantity: 1,
+          unit: "l",
+          category: "Dairy",
+          done: false,
+        },
+      ],
+    });
+    h.state.resultsByTable.shopping_items = {
+      data: shoppingRow({ id: "s1", done: true }),
+      error: null,
+    };
+    await useAppStore.getState().toggleShoppingItem("s1", ctx);
+    expect(useAppStore.getState().shopping[0].done).toBe(true);
+  });
+
+  it("removeShoppingItem deletes from state", async () => {
+    useAppStore.setState({
+      shopping: [
+        {
+          id: "s1",
+          name: "Milk",
+          quantity: 1,
+          unit: "l",
+          category: "Dairy",
+          done: false,
+        },
+      ],
+    });
+    h.state.resultsByTable.shopping_items = { data: null, error: null };
+    await useAppStore.getState().removeShoppingItem("s1", ctx);
+    expect(useAppStore.getState().shopping).toHaveLength(0);
+  });
+
+  it("clearCompleted removes only done items", async () => {
+    useAppStore.setState({
+      shopping: [
+        { id: "a", name: "A", quantity: 1, unit: "pcs", category: "x", done: true },
+        { id: "b", name: "B", quantity: 1, unit: "pcs", category: "x", done: false },
+      ],
+    });
+    h.state.resultsByTable.shopping_items = { data: null, error: null };
+    await useAppStore.getState().clearCompleted(ctx);
+    const left = useAppStore.getState().shopping;
+    expect(left).toHaveLength(1);
+    expect(left[0].id).toBe("b");
+  });
+});
+
+describe("store saved-recipe + meal-plan actions", () => {
+  it("saveRecipe inserts and returns the saved id", async () => {
+    h.state.resultsByTable.saved_recipes = {
+      data: { id: "abc", household_id: "h1", name: "Stew" },
+      error: null,
+    };
+    const id = await useAppStore.getState().saveRecipe(
+      {
+        id: "r1",
+        name: "Stew",
+        description: "",
+        cuisine: "Custom",
+        minutes: 30,
+        difficulty: "easy",
+        servings: 2,
+        equipment: [],
+        ingredients: [],
+        steps: [],
+        tags: [],
+      },
+      ctx,
+    );
+    expect(id).toBe("saved-abc");
+    expect(useAppStore.getState().savedRecipes).toHaveLength(1);
+  });
+
+  it("unsaveRecipe removes it from state", async () => {
+    useAppStore.setState({
+      savedRecipes: [
+        {
+          id: "saved-abc",
+          savedId: "abc",
+          name: "Stew",
+          description: "",
+          cuisine: "Custom",
+          minutes: 30,
+          difficulty: "easy",
+          servings: 2,
+          equipment: [],
+          ingredients: [],
+          steps: [],
+          tags: [],
+        },
+      ],
+    });
+    h.state.resultsByTable.saved_recipes = { data: null, error: null };
+    await useAppStore.getState().unsaveRecipe("abc", ctx);
+    expect(useAppStore.getState().savedRecipes).toHaveLength(0);
+  });
+
+  it("addMealPlan inserts and upserts", async () => {
+    h.state.resultsByTable.meal_plan = {
+      data: {
+        id: "m1",
+        household_id: "h1",
+        date: "2026-06-02",
+        meal: "dinner",
+        recipe_id: "r1",
+      },
+      error: null,
+    };
+    await useAppStore
+      .getState()
+      .addMealPlan({ date: "2026-06-02", meal: "dinner", recipeId: "r1" }, ctx);
+    expect(useAppStore.getState().mealPlan).toHaveLength(1);
+    expect(useAppStore.getState().mealPlan[0].meal).toBe("dinner");
+  });
+
+  it("removeMealPlan deletes from state", async () => {
+    useAppStore.setState({
+      mealPlan: [{ id: "m1", date: "2026-06-02", meal: "dinner", recipeId: "r1" }],
+    });
+    h.state.resultsByTable.meal_plan = { data: null, error: null };
+    await useAppStore.getState().removeMealPlan("m1", ctx);
+    expect(useAppStore.getState().mealPlan).toHaveLength(0);
+  });
+});
+
+describe("cookRecipe", () => {
+  const recipe = {
+    id: "rc1",
+    name: "Two-Ingredient",
+    description: "",
+    cuisine: "Test",
+    minutes: 10,
+    difficulty: "easy" as const,
+    servings: 1,
+    equipment: [],
+    ingredients: [
+      { name: "rice", quantity: 1, unit: "cup" as const },
+      { name: "egg", quantity: 2, unit: "pcs" as const },
+    ],
+    steps: [],
+    tags: [],
+  };
+
+  it("returns missing ingredients without consuming when short", async () => {
+    useAppStore.setState({
+      recipes: [recipe],
+      pantry: [localPantryItem({ id: "p1", name: "rice", quantity: 1, unit: "cup" })],
+    });
+    const result = await useAppStore.getState().cookRecipe("rc1", ctx);
+    expect(result.ok).toBe(false);
+    expect(result.missing).toContain("egg");
+    // nothing was consumed
+    expect(h.state.calls.some((c) => c[0] === "update")).toBe(false);
   });
 });

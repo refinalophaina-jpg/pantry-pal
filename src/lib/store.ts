@@ -693,7 +693,9 @@ export const useAppStore = create<AppState>()(
           .eq("id", savedId)
           .eq("household_id", ctx.householdId);
         if (error) throw error;
-        get()._removeSavedRecipe(savedId);
+        // Stored ids are prefixed (savedRecipeFromRow → `saved-<row.id>`), so
+        // the optimistic removal must match that, not the raw row id.
+        get()._removeSavedRecipe(`saved-${savedId}`);
       },
 
       toggleEquipment: (name) =>

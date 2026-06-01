@@ -40,8 +40,8 @@ grain, deliberate motion), and protected by a **comprehensive test suite**.
 - [x] Fix found by tests: plural normalization (`tomatoes`/`potatoes`/`berries`).
 - [x] Scripts: `typecheck`, `test`, `test:watch`, `test:cov`.
 - [x] This ROADMAP + design-system capture in memory.
-- [ ] GitHub Actions CI (typecheck + test + build on push/PR).
-- [ ] Coverage baseline recorded.
+- [x] GitHub Actions CI (typecheck + test + build on push/PR).
+- [x] Coverage baseline recorded (54.5% overall; pure logic 90–100%).
 
 **Exit gate:** `typecheck` + `test` + `build` green; CI runs on push.
 

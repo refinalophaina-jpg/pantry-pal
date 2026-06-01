@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes land here before the next tagged release._
 
+## [0.4.0] — 2026-06-01
+
+The "platform & data" release: Pantry Pal now runs on web, iOS, Android, and
+desktop from one codebase; ships a searchable food/ingredient/guide/recipe data
+consortium; wears the AinaDara design language with dark mode, a command palette,
+and motion; and is backed by a real test suite + CI.
+
 ### Added
 - **Command palette (⌘K / Ctrl+K):** app-wide quick navigation and actions with
   fuzzy filtering and full keyboard control (arrows, Enter, Escape) — jump to any
@@ -159,7 +166,8 @@ Initial release.
 - **Explore** tab powered by TheMealDB; built-in + cached nutrition estimates.
 - Static export build and Cloudflare Pages deployment.
 
-[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/refinalophaina-jpg/pantry-pal/releases/tag/v0.1.0

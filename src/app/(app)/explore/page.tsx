@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Search, Shuffle, Globe2 } from "lucide-react";
+import { Search, Shuffle, Globe2, ChefHat } from "lucide-react";
 import {
   searchRecipes,
   randomRecipes,
   SPOONACULAR_CUISINES,
 } from "@/lib/spoonacular";
+import { searchRecipeCatalog } from "@/lib/food-db";
 import type { Recipe } from "@/lib/types";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
@@ -34,7 +35,9 @@ export default function ExplorePage() {
     const load =
       active === "discover"
         ? randomRecipes(12)
-        : searchRecipes({ cuisine: active, number: 12 });
+        : active === "kitchen"
+          ? searchRecipeCatalog("", 50)
+          : searchRecipes({ cuisine: active, number: 12 });
     load
       .then((r) => {
         if (!cancelled) setCards(r);
@@ -63,15 +66,25 @@ export default function ExplorePage() {
     }
     setSearching(true);
     setError(null);
+    let spoonErr: unknown = null;
     try {
-      const results = await searchRecipes({ query: q, number: 16 });
-      setSearchResults(results);
-    } catch (e) {
-      setSearchResults([]);
-      toast(
-        e instanceof Error ? e.message : "Search failed — try again.",
-        "warn",
-      );
+      // Search our own catalog and Spoonacular together; our recipes lead.
+      const [cat, spoon] = await Promise.all([
+        searchRecipeCatalog(q, 8).catch(() => [] as Recipe[]),
+        searchRecipes({ query: q, number: 16 }).catch((e) => {
+          spoonErr = e;
+          return [] as Recipe[];
+        }),
+      ]);
+      setSearchResults([...cat, ...spoon]);
+      if (!cat.length && spoonErr) {
+        toast(
+          spoonErr instanceof Error
+            ? spoonErr.message
+            : "Search failed — try again.",
+          "warn",
+        );
+      }
     } finally {
       setSearching(false);
     }
@@ -117,6 +130,12 @@ export default function ExplorePage() {
           onClick={() => setActive("discover")}
         >
           <Shuffle className="size-3.5" /> Discover
+        </Chip>
+        <Chip
+          active={active === "kitchen" && !searchResults}
+          onClick={() => setActive("kitchen")}
+        >
+          <ChefHat className="size-3.5" /> Our Kitchen
         </Chip>
         {SPOONACULAR_CUISINES.map((c) => (
           <Chip

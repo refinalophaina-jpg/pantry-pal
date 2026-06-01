@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Recipe } from "./types";
 import { lookupNutrition, estimateRecipeNutrition } from "./nutrition";
+import { lookupIngredientByName } from "./food-db";
 
 // Make the Supabase cache fallback hermetic: any uncached ingredient resolves
 // to "not found" instead of hitting the network.
@@ -13,6 +14,17 @@ vi.mock("./supabase", () => ({
     }),
   }),
 }));
+
+// Mock the canonical-ingredient DB lookup; default: nothing found.
+vi.mock("./food-db", () => ({
+  lookupIngredientByName: vi.fn().mockResolvedValue(null),
+}));
+const mockedDbLookup = vi.mocked(lookupIngredientByName);
+
+beforeEach(() => {
+  mockedDbLookup.mockReset();
+  mockedDbLookup.mockResolvedValue(null);
+});
 
 function recipe(partial: Partial<Recipe>): Recipe {
   return {
@@ -50,6 +62,34 @@ describe("lookupNutrition", () => {
 
   it("returns null for unknown ingredients (no cache hit)", async () => {
     expect(await lookupNutrition("unobtainium")).toBeNull();
+  });
+
+  it("falls back to the canonical ingredients DB when not builtin", async () => {
+    mockedDbLookup.mockResolvedValueOnce({
+      id: "i1",
+      slug: "dragonfruit",
+      name: "Dragonfruit",
+      category: "Produce",
+      aliases: [],
+      gramsPerPiece: 300,
+      calories: 60,
+      proteinG: 1.2,
+      carbsG: 13,
+      fatG: 0,
+      fiberG: 3,
+      source: "usda",
+    });
+    const per = await lookupNutrition("dragonfruit");
+    expect(per?.calories).toBe(60);
+    // grams_per_piece from the DB row drives piece-based scaling.
+    expect(per?.gramsPerPiece).toBe(300);
+    expect(per?.perPiece).toBe(true);
+  });
+
+  it("prefers the builtin table over the DB (no DB call for builtin hits)", async () => {
+    const per = await lookupNutrition("rice");
+    expect(per?.calories).toBe(130);
+    expect(mockedDbLookup).not.toHaveBeenCalled();
   });
 });
 

@@ -12,6 +12,7 @@
 
 import type { Recipe, UnitType, Nutrition } from "./types";
 import { getSupabase } from "./supabase";
+import { lookupIngredientByName } from "./food-db";
 
 interface Per100 extends Nutrition {
   /** Treat per_unit as 'piece' rather than '100g' (e.g. for eggs). */
@@ -157,9 +158,32 @@ async function cacheLookup(name: string): Promise<Per100 | null> {
   };
 }
 
-/** Best-effort nutrition lookup. Returns null if no source has it. */
+// The canonical `ingredients` table (food consortium) — richer than the tiny
+// builtin table, and it carries conversion factors (grams_per_piece).
+async function dbIngredientLookup(name: string): Promise<Per100 | null> {
+  const ing = await lookupIngredientByName(name).catch(() => null);
+  if (!ing || ing.calories === undefined) return null;
+  return {
+    calories: ing.calories,
+    proteinG: ing.proteinG,
+    carbsG: ing.carbsG,
+    fatG: ing.fatG,
+    fiberG: ing.fiberG,
+    gramsPerPiece: ing.gramsPerPiece,
+    perPiece: ing.gramsPerPiece !== undefined,
+  };
+}
+
+/**
+ * Best-effort nutrition lookup. Tries fastest/most-trusted first:
+ * builtin (instant, offline) → canonical ingredients DB → shared cache.
+ */
 export async function lookupNutrition(name: string): Promise<Per100 | null> {
-  return builtinLookup(name) ?? (await cacheLookup(name));
+  return (
+    builtinLookup(name) ??
+    (await dbIngredientLookup(name)) ??
+    (await cacheLookup(name))
+  );
 }
 
 function toGrams(

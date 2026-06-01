@@ -153,6 +153,26 @@ export async function lookupFoodByBarcode(
   return data ? foodFromRow(data as Record<string, unknown>) : null;
 }
 
+/**
+ * Precise ingredient lookup by slug or exact name (case-insensitive) — for
+ * nutrition resolution, where we want the right row, not a fuzzy best guess.
+ */
+export async function lookupIngredientByName(
+  name: string,
+): Promise<Ingredient | null> {
+  const n = name.trim().toLowerCase();
+  if (!n) return null;
+  const slug = n.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const { data, error } = await getSupabase()
+    .from("ingredients")
+    .select("*")
+    .or(`slug.eq.${slug},name.ilike.${n}`)
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const rows = (data as Record<string, unknown>[]) ?? [];
+  return rows.length ? ingredientFromRow(rows[0]) : null;
+}
+
 /** List cooking techniques, optionally filtered by category. */
 export async function listTechniques(category?: string): Promise<Technique[]> {
   let query = getSupabase().from("techniques").select("*").order("title");

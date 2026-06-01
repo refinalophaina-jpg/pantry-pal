@@ -16,6 +16,7 @@ import {
   Check,
   Globe2,
   GraduationCap,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -54,6 +55,22 @@ export function Sidebar() {
             {household?.name ?? "Cook more · waste less"}
           </div>
         </div>
+      </div>
+      <div className="px-3 pb-3">
+        <button
+          onClick={() =>
+            document.dispatchEvent(
+              new KeyboardEvent("keydown", { key: "k", metaKey: true }),
+            )
+          }
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--text-muted)] bg-[var(--bg)] border border-[var(--border)] hover:text-[var(--text)] cursor-pointer"
+        >
+          <Search className="size-4" />
+          <span className="flex-1 text-left">Search…</span>
+          <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--border)]">
+            ⌘K
+          </kbd>
+        </button>
       </div>
       <nav className="flex-1 px-3 space-y-1">
         {nav.map((n) => {

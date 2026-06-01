@@ -29,7 +29,7 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 // Set data-theme before first paint so there is no flash of the wrong theme.
-const themeInit = `(function(){try{var k='pantry-pal-theme';var t=localStorage.getItem(k);if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
+const themeInit = `(function(){try{var k='pantry-pal-theme';var q=new URLSearchParams(location.search).get('theme');var t=(q==='light'||q==='dark')?q:localStorage.getItem(k);if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);if(q==='light'||q==='dark'){localStorage.setItem(k,t);}}catch(e){}})();`;
 
 export const metadata: Metadata = {
   title: "Pantry Pal — Cook more, waste less",

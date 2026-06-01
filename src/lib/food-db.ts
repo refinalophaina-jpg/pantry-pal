@@ -12,7 +12,7 @@
  */
 
 import { getSupabase } from "./supabase";
-import type { Nutrition } from "./types";
+import type { Nutrition, Recipe } from "./types";
 
 export interface Ingredient {
   id: string;
@@ -113,6 +113,31 @@ export function techniqueFromRow(row: Record<string, unknown>): Technique {
   };
 }
 
+/** Map a recipe_catalog row onto the app's Recipe type (drop-in for the UI). */
+export function catalogRecipeFromRow(row: Record<string, unknown>): Recipe {
+  return {
+    id: `cat-${String(row.slug)}`,
+    name: String(row.name),
+    description: String(row.description ?? ""),
+    cuisine: String(row.cuisine ?? "International"),
+    minutes: Number(row.minutes ?? 30),
+    difficulty: (row.difficulty as Recipe["difficulty"]) ?? "medium",
+    servings: Number(row.servings ?? 2),
+    equipment: (row.equipment as string[]) ?? [],
+    ingredients: (row.ingredients as Recipe["ingredients"]) ?? [],
+    steps: (row.steps as string[]) ?? [],
+    tags: (row.tags as string[]) ?? [],
+    imageUrl: row.image_url ? String(row.image_url) : undefined,
+    area: row.area ? String(row.area) : undefined,
+    source: row.source ? String(row.source) : undefined,
+    externalId: `cat-${String(row.slug)}`,
+    calories: num(row.calories),
+    proteinG: num(row.protein_g),
+    carbsG: num(row.carbs_g),
+    fatG: num(row.fat_g),
+  };
+}
+
 /** Per-100g nutrition for an ingredient, or null if it carries no data. */
 export function ingredientNutrition(ing: Ingredient): Nutrition | null {
   if (ing.calories === undefined) return null;
@@ -138,6 +163,19 @@ export async function searchIngredients(
   });
   if (error) throw new Error(error.message);
   return ((data as Record<string, unknown>[]) ?? []).map(ingredientFromRow);
+}
+
+/** Typo-tolerant search over the public recipe catalog → app Recipe[]. */
+export async function searchRecipeCatalog(
+  q: string,
+  limit = 20,
+): Promise<Recipe[]> {
+  const { data, error } = await getSupabase().rpc("search_recipe_catalog", {
+    q,
+    lim: limit,
+  });
+  if (error) throw new Error(error.message);
+  return ((data as Record<string, unknown>[]) ?? []).map(catalogRecipeFromRow);
 }
 
 /** Look up a branded product by barcode (EAN/UPC). */

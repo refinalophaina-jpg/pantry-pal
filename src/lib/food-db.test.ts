@@ -3,6 +3,7 @@ import {
   ingredientFromRow,
   foodFromRow,
   techniqueFromRow,
+  catalogRecipeFromRow,
   ingredientNutrition,
   type Ingredient,
 } from "./food-db";
@@ -83,6 +84,47 @@ describe("techniqueFromRow", () => {
     expect(t.difficulty).toBe("medium");
     expect(t.minutes).toBe(15);
     expect(t.tags).toEqual(["protein", "heat"]);
+  });
+});
+
+describe("catalogRecipeFromRow", () => {
+  it("maps a catalog row onto the app Recipe shape", () => {
+    const r = catalogRecipeFromRow({
+      slug: "chickpea-curry",
+      name: "Chickpea Curry",
+      description: "Cosy and fragrant.",
+      cuisine: "Indian",
+      minutes: 35,
+      difficulty: "medium",
+      servings: 4,
+      equipment: ["pot"],
+      ingredients: [{ name: "chickpeas", quantity: 2, unit: "cup" }],
+      steps: ["Saute.", "Simmer."],
+      tags: ["vegan", "curry"],
+      image_url: null,
+      area: null,
+      source: null,
+      calories: 410,
+      protein_g: "15",
+      carbs_g: "48",
+      fat_g: "18",
+    });
+    expect(r.id).toBe("cat-chickpea-curry");
+    expect(r.externalId).toBe("cat-chickpea-curry");
+    expect(r.difficulty).toBe("medium");
+    expect(r.ingredients).toHaveLength(1);
+    expect(r.steps).toEqual(["Saute.", "Simmer."]);
+    expect(r.proteinG).toBe(15);
+    expect(r.imageUrl).toBeUndefined();
+  });
+
+  it("applies defaults for sparse rows", () => {
+    const r = catalogRecipeFromRow({ slug: "x", name: "X" });
+    expect(r.cuisine).toBe("International");
+    expect(r.minutes).toBe(30);
+    expect(r.difficulty).toBe("medium");
+    expect(r.servings).toBe(2);
+    expect(r.ingredients).toEqual([]);
   });
 });
 

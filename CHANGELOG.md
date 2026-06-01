@@ -23,9 +23,11 @@ _Changes land here before the next tagged release._
   `recipe_catalog` (shared recipe corpus) — each with full-text **and** trigram
   search, so lookups tolerate typos and word order. A `search_ingredients` /
   `search_recipe_catalog` RPC powers autocomplete; `src/lib/food-db.ts` is the
-  typed client. Ships a curated seed (~32 ingredients, 5 techniques); importers
-  in `scripts/` load USDA FoodData Central → ingredients and Open Food Facts →
-  foods. Migration validated against a throwaway Postgres 16 + pg_trgm.
+  typed client. Seeded with **74 ingredients** and **15 cooking guides** (each a
+  real step-by-step technique with markdown body); importers in `scripts/` load
+  USDA FoodData Central → ingredients and Open Food Facts → foods for further
+  scale. Migrations validated against a throwaway Postgres 16 + pg_trgm and
+  applied to the live project.
 - **Desktop app (Tauri):** the static export now also runs as a native desktop
   app via Tauri 2 (`src-tauri/`, identifier `com.ainadara.pantrypal`,
   warm-paper window). `npm run tauri:dev` / `tauri:build`. The Rust shell

@@ -28,6 +28,7 @@ import {
   IngredientAutocomplete,
   pantryCategoryFor,
 } from "@/components/ingredient-autocomplete";
+import { lookupFoodByBarcode } from "@/lib/food-db";
 import { useToast } from "@/components/toast";
 import { useAction } from "@/lib/use-action";
 import { expiryStatus, uid } from "@/lib/utils";
@@ -512,15 +513,31 @@ const OFF_CATEGORY_RULES: Array<[RegExp, string]> = [
   [/oil|olive/i, "Oils"],
 ];
 
+function bucketForCategory(text: string): string {
+  return OFF_CATEGORY_RULES.find(([re]) => re.test(text))?.[1] ?? "Other";
+}
+
 /**
- * Resolve a scanned UPC/EAN to a real product via Open Food Facts — a free,
- * open, key-less grocery database (CORS-enabled, so it works from this static
- * site). Returns null when the code isn't found, so the UI can fall back to
- * manual entry. ZXing already decoded the number correctly; this names it.
+ * Resolve a scanned UPC/EAN to a product. Prefers our own `foods` catalog
+ * (imported from Open Food Facts — instant, and works once cached), then falls
+ * back to the live Open Food Facts API. Returns null when unknown so the UI can
+ * offer manual entry. ZXing already decoded the number; this names it.
  */
 async function lookupProduct(
   code: string,
 ): Promise<{ name: string; category: string } | null> {
+  // 1) Our own catalog first.
+  try {
+    const food = await lookupFoodByBarcode(code);
+    if (food) {
+      const name =
+        [food.brand, food.name].filter(Boolean).join(" ").trim() || food.name;
+      return { name, category: bucketForCategory(`${food.category} ${food.name}`) };
+    }
+  } catch {
+    // fall through to the live API
+  }
+  // 2) Live Open Food Facts.
   try {
     const res = await fetch(
       `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(
@@ -542,9 +559,7 @@ async function lookupProduct(
       .trim();
     if (!name) return null;
     const tags = (p.categories_tags ?? []).join(" ");
-    const category =
-      OFF_CATEGORY_RULES.find(([re]) => re.test(tags))?.[1] ?? "Other";
-    return { name, category };
+    return { name, category: bucketForCategory(tags) };
   } catch {
     return null;
   }

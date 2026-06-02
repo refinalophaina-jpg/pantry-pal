@@ -462,3 +462,75 @@ describe("cookRecipe", () => {
     expect(h.state.calls.some((c) => c[0] === "update")).toBe(false);
   });
 });
+
+describe("buildWeekList + generateFromRecipe", () => {
+  const recipe = {
+    id: "r1",
+    name: "Egg Fried Rice",
+    description: "",
+    cuisine: "Chinese",
+    minutes: 20,
+    difficulty: "easy" as const,
+    servings: 2,
+    equipment: [],
+    ingredients: [
+      { name: "rice", quantity: 2, unit: "cup" as const },
+      { name: "egg", quantity: 3, unit: "pcs" as const },
+    ],
+    steps: [],
+    tags: [],
+  };
+
+  it("buildWeekList adds only the deficit, skipping owned + listed items", async () => {
+    useAppStore.setState({
+      recipes: [recipe],
+      mealPlan: [
+        { id: "m1", date: "2026-06-01", meal: "dinner", recipeId: "r1" },
+      ],
+      pantry: [localPantryItem({ id: "p1", name: "rice", quantity: 5, unit: "cup" })],
+      shopping: [],
+    });
+    h.state.resultsByTable.shopping_items = {
+      data: shoppingRow({ id: "sx", name: "egg" }),
+      error: null,
+    };
+    // rice is covered (have 5 >= 2); only egg is short -> 1 item added.
+    const added = await useAppStore
+      .getState()
+      .buildWeekList(["2026-06-01"], ctx);
+    expect(added).toBe(1);
+  });
+
+  it("buildWeekList skips an ingredient already on the list", async () => {
+    useAppStore.setState({
+      recipes: [recipe],
+      mealPlan: [
+        { id: "m1", date: "2026-06-01", meal: "dinner", recipeId: "r1" },
+      ],
+      pantry: [localPantryItem({ id: "p1", name: "rice", quantity: 5, unit: "cup" })],
+      shopping: [
+        { id: "s1", name: "egg", quantity: 1, unit: "pcs", category: "x", done: false },
+      ],
+    });
+    const added = await useAppStore
+      .getState()
+      .buildWeekList(["2026-06-01"], ctx);
+    expect(added).toBe(0);
+  });
+
+  it("generateFromRecipe adds the missing ingredients to the list", async () => {
+    useAppStore.setState({
+      recipes: [recipe],
+      pantry: [localPantryItem({ id: "p1", name: "rice", quantity: 5, unit: "cup" })],
+      shopping: [],
+    });
+    h.state.resultsByTable.shopping_items = {
+      data: shoppingRow({ id: "sx", name: "egg", category: "From recipe" }),
+      error: null,
+    };
+    await useAppStore.getState().generateFromRecipe("r1", ctx);
+    expect(useAppStore.getState().shopping.some((s) => s.name === "egg")).toBe(
+      true,
+    );
+  });
+});

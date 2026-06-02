@@ -123,7 +123,7 @@ const UNIT_PATTERNS: Array<{ re: RegExp; unit: UnitType; factor: number }> = [
   { re: /\bcups?\b/i, unit: "cup", factor: 1 },
 ];
 
-function parseFraction(str: string): number | null {
+export function parseFraction(str: string): number | null {
   const trimmed = str.trim();
   if (!trimmed) return null;
   // Mixed: "1 1/2"
@@ -142,7 +142,7 @@ function parseFraction(str: string): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
-function parseMeasure(raw: string): { quantity: number; unit: UnitType } {
+export function parseMeasure(raw: string): { quantity: number; unit: UnitType } {
   const measure = (raw ?? "").trim();
   if (!measure) return { quantity: 1, unit: "pcs" };
 
@@ -163,7 +163,7 @@ function parseMeasure(raw: string): { quantity: number; unit: UnitType } {
   return { quantity: qty && qty > 0 ? qty : 1, unit };
 }
 
-function mealToRecipe(meal: MealDBFull): Recipe {
+export function mealToRecipe(meal: MealDBFull): Recipe {
   const ingredients: Recipe["ingredients"] = [];
   for (let i = 1; i <= 20; i++) {
     const name = (meal[`strIngredient${i}`] ?? "").trim();

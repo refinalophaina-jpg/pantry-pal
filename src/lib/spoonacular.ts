@@ -17,12 +17,12 @@ const UNIT_MAP: Record<string, UnitType> = {
   cup: "cup", cups: "cup",
 };
 
-function mapUnit(u?: string): UnitType {
+export function mapUnit(u?: string): UnitType {
   if (!u) return "pcs";
   return UNIT_MAP[u.toLowerCase().trim()] ?? "pcs";
 }
 
-function stripHtml(s?: string): string {
+export function stripHtml(s?: string): string {
   return (s ?? "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
 }
 
@@ -46,7 +46,7 @@ interface SpoonResult {
   analyzedInstructions?: Array<{ steps: Array<{ step: string }> }>;
 }
 
-function toRecipe(r: SpoonResult): Recipe {
+export function toRecipe(r: SpoonResult): Recipe {
   const minutes = r.readyInMinutes ?? 30;
   const steps = (r.analyzedInstructions?.[0]?.steps ?? [])
     .map((s) => s.step)

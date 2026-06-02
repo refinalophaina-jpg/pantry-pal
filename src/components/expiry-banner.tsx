@@ -97,7 +97,8 @@ export function ExpiryBanner() {
         </div>
         <div className="flex-1">
           <div className="font-semibold text-[var(--warn)]">
-            {urgent.length} item{urgent.length === 1 ? "" : "s"} need attention
+            {urgent.length} item{urgent.length === 1 ? " needs" : "s need"}{" "}
+            attention
           </div>
           <div className="text-sm text-[var(--text)] mt-0.5">
             {urgent

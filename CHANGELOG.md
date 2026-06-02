@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes land here before the next tagged release._
 
+## [0.5.0] — 2026-06-01
+
+The "rearrange & reinforce" release: drag-and-drop meal planning, and a major
+test push that nearly doubled coverage (47.8% → 69%, 124 tests) while surfacing
+and fixing a real bug.
+
 ### Added
 - **Drag-and-drop meal planning:** drag a meal between any slots in the weekly
   grid to rearrange it (native HTML5 DnD, no new deps). Optimistic move with a
@@ -21,6 +27,11 @@ _Changes land here before the next tagged release._
   row id, but saved recipes are stored under a `saved-`-prefixed id, so the
   optimistic local removal never matched (it only cleared once the realtime
   DELETE arrived). Surfaced by the new store action tests.
+
+### Tests
+- Coverage 47.8% → 69%: store actions (incl. consume, move, buildWeekList) at
+  91%, the Spoonacular + TheMealDB recipe mappers, food-db queries (100%), the
+  toast system, and the `useAction`/`useMounted` hooks.
 
 ## [0.4.0] — 2026-06-01
 
@@ -179,7 +190,8 @@ Initial release.
 - **Explore** tab powered by TheMealDB; built-in + cached nutrition estimates.
 - Static export build and Cloudflare Pages deployment.
 
-[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.1.0...v0.2.0

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes land here before the next tagged release._
 
+## [0.8.0] — 2026-06-03
+
+The "polish & docs" release: an accessibility test pass and a comprehensive
+rewrite of the README (per-platform run instructions + a usage guide).
+
+### Added
+- **Accessibility tests:** jest-axe checks over the design-system primitives and
+  common compositions (buttons, badges, cards, labeled forms, empty states,
+  modal) — all clean.
+
+### Changed
+- **README** rewritten end to end: what it does, the food consortium, running on
+  web / PWA / iOS / Android / desktop, a quick usage guide, stack, structure,
+  and security notes.
+
 ## [0.7.0] — 2026-06-03
 
 The "organize" release: sort and rearrange your pantry, with test coverage now
@@ -227,7 +242,8 @@ Initial release.
 - **Explore** tab powered by TheMealDB; built-in + cached nutrition estimates.
 - Static export build and Cloudflare Pages deployment.
 
-[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.4.0...v0.5.0

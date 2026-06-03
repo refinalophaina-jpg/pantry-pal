@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Inline pantry quantity steppers:** adjust an item's amount with +/- right on
+  its card — updates instantly and debounces the save so rapid taps coalesce into
+  one write (no modal needed).
 - **Live recipe scaling:** a servings stepper in the recipe view scales every
   ingredient amount in real time (and re-checks what your pantry covers at the
   new quantity). Won't go below 1 serving.

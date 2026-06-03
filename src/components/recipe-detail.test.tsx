@@ -124,6 +124,33 @@ describe("RecipeDetail", () => {
     expect(onCook).toHaveBeenCalledOnce();
   });
 
+  it("scales ingredient amounts with the servings stepper", async () => {
+    renderDetail();
+    expect(screen.getByText("200 g")).toBeInTheDocument();
+    expect(screen.getByText("300 g")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /more servings/i }));
+    // 5/4 = 1.25 → 250 / 375
+    expect(screen.getByText("250 g")).toBeInTheDocument();
+    expect(screen.getByText("375 g")).toBeInTheDocument();
+
+    // back down to 3 servings → 0.75 → 150 / 225
+    await userEvent.click(screen.getByRole("button", { name: /fewer servings/i }));
+    await userEvent.click(screen.getByRole("button", { name: /fewer servings/i }));
+    expect(screen.getByText("150 g")).toBeInTheDocument();
+    expect(screen.getByText("225 g")).toBeInTheDocument();
+  });
+
+  it("won't drop below 1 serving", async () => {
+    renderDetail();
+    const fewer = screen.getByRole("button", { name: /fewer servings/i });
+    // base is 4; click down past 1
+    for (let i = 0; i < 6; i++) await userEvent.click(fewer);
+    expect(fewer).toBeDisabled();
+    // 1/4 = 0.25 → noodles 50 g
+    expect(screen.getByText("50 g")).toBeInTheDocument();
+  });
+
   it("closes on Escape", () => {
     const { onClose } = renderDetail();
     fireEvent.keyDown(document, { key: "Escape" });

@@ -23,6 +23,11 @@ import { useToast } from "@/components/toast";
 import { Badge, Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
+/** Tidy a scaled quantity: round to 2 dp and drop trailing zeros (1.5, 2, 0.33). */
+function fmtQty(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
+
 export function RecipeDetail({
   recipe,
   onClose,
@@ -38,6 +43,11 @@ export function RecipeDetail({
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [nutrition, setNutrition] = useState<RecipeNutrition | null>(null);
+
+  // Live recipe scaling: adjust servings and ingredient amounts scale with it.
+  const baseServings = Math.max(1, recipe.servings || 1);
+  const [servings, setServings] = useState(baseServings);
+  const scale = servings / baseServings;
 
   useEffect(() => {
     if (recipe.calories) return; // already computed/saved
@@ -81,7 +91,7 @@ export function RecipeDetail({
     const owned = pantry.find(
       (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
     );
-    return owned && owned.quantity >= ing.quantity;
+    return owned && owned.quantity >= ing.quantity * scale;
   }).length;
   const haveTotal = required.length;
   const havePct = haveTotal ? Math.round((haveCount / haveTotal) * 100) : 0;
@@ -190,9 +200,36 @@ export function RecipeDetail({
             <Stat icon={<ChefHat className="size-3.5" />} capitalize>
               {recipe.difficulty}
             </Stat>
-            <Stat icon={<Users className="size-3.5" />}>
-              {recipe.servings} servings
-            </Stat>
+            <span className="inline-flex items-center gap-1.5">
+              <Users className="size-3.5" />
+              <button
+                type="button"
+                aria-label="Fewer servings"
+                onClick={() => setServings((s) => Math.max(1, s - 1))}
+                disabled={servings <= 1}
+                className="size-5 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] disabled:opacity-40 cursor-pointer"
+              >
+                −
+              </button>
+              <span className="min-w-[1.5ch] text-center font-medium text-[var(--text)] tabular-nums">
+                {servings}
+              </span>
+              <button
+                type="button"
+                aria-label="More servings"
+                onClick={() => setServings((s) => Math.min(99, s + 1))}
+                className="size-5 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
+              >
+                +
+              </button>
+              servings
+              {scale !== 1 && (
+                <span className="text-[var(--accent)] text-xs">
+                  ·{" "}
+                  {scale > 1 ? "scaled up" : "scaled down"}
+                </span>
+              )}
+            </span>
             {recipe.area && (
               <Stat icon={<Globe2 className="size-3.5" />}>{recipe.area}</Stat>
             )}
@@ -282,7 +319,8 @@ export function RecipeDetail({
                 const owned = pantry.find(
                   (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
                 );
-                const sufficient = owned && owned.quantity >= ing.quantity;
+                const sufficient =
+                  owned && owned.quantity >= ing.quantity * scale;
                 return (
                   <li
                     key={`${ing.name}-${i}`}
@@ -290,7 +328,7 @@ export function RecipeDetail({
                   >
                     <span>
                       <span className="text-[var(--text-muted)]">
-                        {ing.quantity} {ing.unit}
+                        {fmtQty(ing.quantity * scale)} {ing.unit}
                       </span>{" "}
                       {ing.name}
                       {ing.optional && (

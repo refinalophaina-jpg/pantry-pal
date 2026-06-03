@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Changes land here before the next tagged release._
+### Added
+- **Live recipe scaling:** a servings stepper in the recipe view scales every
+  ingredient amount in real time (and re-checks what your pantry covers at the
+  new quantity). Won't go below 1 serving.
+
+### Tests
+- Coverage to ~91%: the heavy components are now covered — RecipeDetail,
+  CookMode, Sidebar, ExpiryBanner, page-header — plus the async TheMealDB /
+  Spoonacular fetch paths and the Supabase client guard.
 
 ## [0.5.0] — 2026-06-01
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Changes land here before the next tagged release._
+
+## [0.6.0] — 2026-06-03
+
+The "interactions" release: three new ways to work hands-on with your kitchen —
+scale recipes live, nudge pantry quantities inline, and add ingredients from the
+command palette — on top of a test suite now near 91% coverage.
+
 ### Added
 - **Command palette ingredient search:** the ⌘K palette now searches the food
   consortium as you type — pick a match to quick-add it straight to your pantry,
@@ -204,7 +212,8 @@ Initial release.
 - **Explore** tab powered by TheMealDB; built-in + cached nutrition estimates.
 - Static export build and Cloudflare Pages deployment.
 
-[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.2.0...v0.3.0

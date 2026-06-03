@@ -31,7 +31,7 @@ import {
 import { lookupFoodByBarcode } from "@/lib/food-db";
 import { useToast } from "@/components/toast";
 import { useAction } from "@/lib/use-action";
-import { expiryStatus, uid } from "@/lib/utils";
+import { expiryStatus, uid, cn } from "@/lib/utils";
 import type { PantryItem, StorageZone, UnitType } from "@/lib/types";
 
 const UNITS: UnitType[] = ["pcs", "g", "kg", "ml", "l", "tbsp", "tsp", "cup"];
@@ -87,6 +87,22 @@ export default function PantryPage() {
   const [open, setOpen] = useState<"add" | "scan" | "photo" | null>(null);
   const [editing, setEditing] = useState<PantryItem | null>(null);
   const [sort, setSort] = useState<SortMode>("expiry");
+  // Drag a pantry card onto a zone button to move it there.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overZone, setOverZone] = useState<StorageZone | null>(null);
+
+  function dropOnZone(e: React.DragEvent, z: StorageZone) {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain") || dragId;
+    setDragId(null);
+    setOverZone(null);
+    const it = id && pantry.find((p) => p.id === id);
+    if (!it || it.zone === z) return;
+    run(() => updatePantryItem(id as string, { zone: z }), {
+      success: `Moved ${it.name} to ${z}.`,
+      error: "Couldn't move the item — try again.",
+    });
+  }
 
   const filtered = useMemo(() => {
     const matched = pantry
@@ -139,16 +155,36 @@ export default function PantryPage() {
           />
         </div>
         <div className="flex gap-2">
-          {(["all", ...ZONES] as const).map((z) => (
-            <Button
-              key={z}
-              variant={zone === z ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setZone(z)}
-            >
-              <span className="capitalize">{z}</span>
-            </Button>
-          ))}
+          {(["all", ...ZONES] as const).map((z) => {
+            const isDropZone = z !== "all" && dragId !== null;
+            return (
+              <Button
+                key={z}
+                variant={zone === z ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => setZone(z)}
+                onDragOver={
+                  isDropZone
+                    ? (e) => {
+                        e.preventDefault();
+                        setOverZone(z as StorageZone);
+                      }
+                    : undefined
+                }
+                onDragLeave={isDropZone ? () => setOverZone(null) : undefined}
+                onDrop={
+                  isDropZone ? (e) => dropOnZone(e, z as StorageZone) : undefined
+                }
+                className={
+                  isDropZone && overZone === z
+                    ? "ring-2 ring-[var(--terracotta-q)]"
+                    : ""
+                }
+              >
+                <span className="capitalize">{z}</span>
+              </Button>
+            );
+          })}
         </div>
         <Select
           aria-label="Sort items"
@@ -178,7 +214,23 @@ export default function PantryPage() {
           {filtered.map((item) => {
             const s = expiryStatus(item.expiresOn);
             return (
-              <Card key={item.id} className="flex flex-col gap-3">
+              <Card
+                key={item.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/plain", item.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  setDragId(item.id);
+                }}
+                onDragEnd={() => {
+                  setDragId(null);
+                  setOverZone(null);
+                }}
+                className={cn(
+                  "flex flex-col gap-3 cursor-grab active:cursor-grabbing",
+                  dragId === item.id && "opacity-50",
+                )}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="font-medium">{item.name}</div>

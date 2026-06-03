@@ -9,10 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes land here before the next tagged release._
 
+## [0.7.0] — 2026-06-03
+
+The "organize" release: sort and rearrange your pantry, with test coverage now
+spanning the auth / sync / service-worker layers (~91%).
+
 ### Added
 - **Pantry sorting:** sort your items by *Expiring first*, *Name (A–Z)*, or
   *Recently added* from a control next to the search box.
+- **Drag items between zones:** drag a pantry card onto the Pantry / Fridge /
+  Freezer filter to move it there.
 
+### Tests
+- Coverage extended to the context layers: AuthProvider (init + sign-in/out),
+  DataSync (initial load + realtime subscribe), and the ServiceWorker janitor.
 
 ## [0.6.0] — 2026-06-03
 
@@ -217,7 +227,8 @@ Initial release.
 - **Explore** tab powered by TheMealDB; built-in + cached nutrition estimates.
 - Static export build and Cloudflare Pages deployment.
 
-[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/refinalophaina-jpg/pantry-pal/compare/v0.3.0...v0.4.0

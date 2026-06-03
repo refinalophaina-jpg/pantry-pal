@@ -50,6 +50,28 @@ const CATEGORIES = [
   "Other",
 ];
 
+export type SortMode = "expiry" | "name" | "added";
+
+/** Sort pantry items by soonest expiry (no-expiry last), name, or newest first. */
+export function sortPantry(items: PantryItem[], mode: SortMode): PantryItem[] {
+  const copy = [...items];
+  if (mode === "name") {
+    return copy.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+    );
+  }
+  if (mode === "added") {
+    // Most recently added first; ties keep stable order.
+    return copy.sort((a, b) => (b.addedOn ?? "").localeCompare(a.addedOn ?? ""));
+  }
+  // expiry: soonest first, items without an expiry sorted to the end.
+  return copy.sort((a, b) => {
+    const ad = a.expiresOn ?? "9999-99-99";
+    const bd = b.expiresOn ?? "9999-99-99";
+    return ad.localeCompare(bd);
+  });
+}
+
 export default function PantryPage() {
   const pantry = useAppStore((s) => s.pantry);
   const {
@@ -64,22 +86,19 @@ export default function PantryPage() {
   const [zone, setZone] = useState<StorageZone | "all">("all");
   const [open, setOpen] = useState<"add" | "scan" | "photo" | null>(null);
   const [editing, setEditing] = useState<PantryItem | null>(null);
+  const [sort, setSort] = useState<SortMode>("expiry");
 
   const filtered = useMemo(() => {
-    return pantry
+    const matched = pantry
       .filter((p) => (zone === "all" ? true : p.zone === zone))
       .filter(
         (p) =>
           !query ||
           p.name.toLowerCase().includes(query.toLowerCase()) ||
           p.category.toLowerCase().includes(query.toLowerCase()),
-      )
-      .sort((a, b) => {
-        const ad = a.expiresOn ?? "9999-99-99";
-        const bd = b.expiresOn ?? "9999-99-99";
-        return ad.localeCompare(bd);
-      });
-  }, [pantry, zone, query]);
+      );
+    return sortPantry(matched, sort);
+  }, [pantry, zone, query, sort]);
 
   return (
     <div>
@@ -131,6 +150,16 @@ export default function PantryPage() {
             </Button>
           ))}
         </div>
+        <Select
+          aria-label="Sort items"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortMode)}
+          className="sm:w-44"
+        >
+          <option value="expiry">Expiring first</option>
+          <option value="name">Name (A–Z)</option>
+          <option value="added">Recently added</option>
+        </Select>
       </div>
 
       {filtered.length === 0 ? (

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes land here before the next tagged release._
 
+### Added
+- **Pantry sorting:** sort your items by *Expiring first*, *Name (A–Z)*, or
+  *Recently added* from a control next to the search box.
+
+
 ## [0.6.0] — 2026-06-03
 
 The "interactions" release: three new ways to work hands-on with your kitchen —

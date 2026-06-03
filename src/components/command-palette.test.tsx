@@ -2,9 +2,27 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CommandPalette } from "./command-palette";
+import { ToastProvider } from "./toast";
+import { searchIngredients } from "@/lib/food-db";
 
-const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+const { push, addPantryItem } = vi.hoisted(() => ({
+  push: vi.fn(),
+  addPantryItem: vi.fn(),
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("@/lib/data-sync", () => ({
+  useSyncedActions: () => ({ addPantryItem }),
+}));
+vi.mock("@/lib/food-db", () => ({ searchIngredients: vi.fn() }));
+const mockedSearch = vi.mocked(searchIngredients);
+
+function renderPalette() {
+  return render(
+    <ToastProvider>
+      <CommandPalette />
+    </ToastProvider>,
+  );
+}
 
 function openPalette() {
   act(() => {
@@ -14,12 +32,16 @@ function openPalette() {
 
 beforeEach(() => {
   push.mockReset();
+  addPantryItem.mockReset();
+  addPantryItem.mockResolvedValue(undefined);
+  mockedSearch.mockReset();
+  mockedSearch.mockResolvedValue([]);
   document.documentElement.removeAttribute("data-theme");
 });
 
 describe("CommandPalette", () => {
   it("is hidden until ⌘K, then opens", () => {
-    render(<CommandPalette />);
+    renderPalette();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     openPalette();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -27,7 +49,7 @@ describe("CommandPalette", () => {
   });
 
   it("filters commands by query", async () => {
-    render(<CommandPalette />);
+    renderPalette();
     openPalette();
     await userEvent.type(screen.getByLabelText("Search commands"), "shopping");
     expect(screen.getByText("Go to Shopping")).toBeInTheDocument();
@@ -35,19 +57,17 @@ describe("CommandPalette", () => {
   });
 
   it("runs a command on click and navigates", async () => {
-    render(<CommandPalette />);
+    renderPalette();
     openPalette();
     await userEvent.click(screen.getByText("Go to Learn"));
     expect(push).toHaveBeenCalledWith("/learn");
-    // closes after running
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("keyboard: arrow-down then Enter runs the highlighted command", async () => {
-    render(<CommandPalette />);
+  it("keyboard: arrow-down then Enter runs the highlighted command", () => {
+    renderPalette();
     openPalette();
     const input = screen.getByLabelText("Search commands");
-    // first item is Dashboard (active 0); ArrowDown -> Pantry, Enter
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(push).toHaveBeenCalledWith("/pantry");
@@ -55,14 +75,35 @@ describe("CommandPalette", () => {
 
   it("toggles the theme via the action command", async () => {
     document.documentElement.setAttribute("data-theme", "light");
-    render(<CommandPalette />);
+    renderPalette();
     openPalette();
     await userEvent.click(screen.getByText("Toggle light / dark theme"));
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
+  it("searches the consortium and quick-adds an ingredient to the pantry", async () => {
+    mockedSearch.mockResolvedValue([
+      {
+        id: "i1",
+        slug: "spinach",
+        name: "Spinach",
+        category: "Produce",
+        aliases: [],
+        source: "curated",
+      },
+    ]);
+    renderPalette();
+    openPalette();
+    await userEvent.type(screen.getByLabelText("Search commands"), "spin");
+    const opt = await screen.findByText(/Add .Spinach. to pantry/);
+    await userEvent.click(opt);
+    expect(addPantryItem).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Spinach", zone: "pantry", quantity: 1 }),
+    );
+  });
+
   it("closes on Escape", () => {
-    render(<CommandPalette />);
+    renderPalette();
     openPalette();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     act(() => {

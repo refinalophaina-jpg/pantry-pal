@@ -20,8 +20,13 @@ import {
   SunMoon,
   Search,
   CornerDownLeft,
+  Plus,
 } from "lucide-react";
 import { applyTheme, currentTheme } from "@/components/theme-toggle";
+import { useSyncedActions } from "@/lib/data-sync";
+import { useToast } from "@/components/toast";
+import { searchIngredients, type Ingredient } from "@/lib/food-db";
+import { pantryCategoryFor } from "@/components/ingredient-autocomplete";
 import { cn } from "@/lib/utils";
 
 interface Command {
@@ -38,9 +43,34 @@ interface Command {
  */
 export function CommandPalette() {
   const router = useRouter();
+  const { addPantryItem } = useSyncedActions();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+
+  const addToPantry = useCallback(
+    async (ing: Ingredient) => {
+      setOpen(false);
+      try {
+        await addPantryItem({
+          name: ing.name,
+          category: pantryCategoryFor(ing.category),
+          quantity: 1,
+          unit: "pcs",
+          zone: "pantry",
+        });
+        toast(`${ing.name} added to pantry.`);
+      } catch (e) {
+        toast(
+          e instanceof Error ? e.message : "Couldn't add to pantry",
+          "warn",
+        );
+      }
+    },
+    [addPantryItem, toast],
+  );
 
   const commands = useMemo<Command[]>(() => {
     const go = (href: string) => () => router.push(href);
@@ -63,12 +93,42 @@ export function CommandPalette() {
     ];
   }, [router]);
 
+  // Live ingredient search from the consortium (debounced, fails soft).
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setIngredients([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const found = await searchIngredients(q, 5);
+        if (!cancelled) setIngredients(found);
+      } catch {
+        if (!cancelled) setIngredients([]);
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [query]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q
+    const staticMatches = q
       ? commands.filter((c) => c.label.toLowerCase().includes(q))
       : commands;
-  }, [commands, query]);
+    const ingredientCommands: Command[] = ingredients.map((ing) => ({
+      id: `ing-${ing.id}`,
+      label: `Add “${ing.name}” to pantry`,
+      group: "Add to pantry",
+      icon: Plus,
+      run: () => addToPantry(ing),
+    }));
+    return [...staticMatches, ...ingredientCommands];
+  }, [commands, query, ingredients, addToPantry]);
 
   // Global ⌘K / Ctrl+K toggles; Escape closes.
   useEffect(() => {

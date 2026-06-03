@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Command palette ingredient search:** the ⌘K palette now searches the food
+  consortium as you type — pick a match to quick-add it straight to your pantry,
+  alongside the existing navigation/theme commands.
 - **Inline pantry quantity steppers:** adjust an item's amount with +/- right on
   its card — updates instantly and debounces the save so rapid taps coalesce into
   one write (no modal needed).

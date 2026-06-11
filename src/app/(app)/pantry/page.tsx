@@ -28,7 +28,8 @@ import {
   IngredientAutocomplete,
   pantryCategoryFor,
 } from "@/components/ingredient-autocomplete";
-import { lookupFoodByBarcode } from "@/lib/food-db";
+import { lookupProduct, type ScannedProduct } from "@/lib/barcode";
+import { NutritionFacts } from "@/components/nutrition-facts";
 import { useToast } from "@/components/toast";
 import { useAction } from "@/lib/use-action";
 import { expiryStatus, uid, cn } from "@/lib/utils";
@@ -645,71 +646,6 @@ function EditItemModal({
   );
 }
 
-// Map Open Food Facts category tags onto our pantry categories.
-const OFF_CATEGORY_RULES: Array<[RegExp, string]> = [
-  [/dairy|milk|cheese|yogurt|butter|cream/i, "Dairy"],
-  [/beverage|drink|water|juice|soda|coffee|tea/i, "Beverages"],
-  [/snack|chip|crisp|cracker|cookie|candy|chocolate|biscuit/i, "Snacks"],
-  [/meat|poultry|chicken|beef|pork|fish|seafood|sausage|tofu|legume|bean/i, "Protein"],
-  [/vegetable|fruit|produce|salad/i, "Produce"],
-  [/cereal|pasta|rice|bread|grain|flour|noodle/i, "Grains"],
-  [/frozen/i, "Frozen"],
-  [/sauce|condiment|spread|ketchup|mustard|mayonnaise|vinegar/i, "Condiments"],
-  [/oil|olive/i, "Oils"],
-];
-
-function bucketForCategory(text: string): string {
-  return OFF_CATEGORY_RULES.find(([re]) => re.test(text))?.[1] ?? "Other";
-}
-
-/**
- * Resolve a scanned UPC/EAN to a product. Prefers our own `foods` catalog
- * (imported from Open Food Facts — instant, and works once cached), then falls
- * back to the live Open Food Facts API. Returns null when unknown so the UI can
- * offer manual entry. ZXing already decoded the number; this names it.
- */
-async function lookupProduct(
-  code: string,
-): Promise<{ name: string; category: string } | null> {
-  // 1) Our own catalog first.
-  try {
-    const food = await lookupFoodByBarcode(code);
-    if (food) {
-      const name =
-        [food.brand, food.name].filter(Boolean).join(" ").trim() || food.name;
-      return { name, category: bucketForCategory(`${food.category} ${food.name}`) };
-    }
-  } catch {
-    // fall through to the live API
-  }
-  // 2) Live Open Food Facts.
-  try {
-    const res = await fetch(
-      `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(
-        code,
-      )}.json?fields=product_name,brands,categories_tags`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data.status !== 1 || !data.product) return null;
-    const p = data.product as {
-      product_name?: string;
-      brands?: string;
-      categories_tags?: string[];
-    };
-    const name = [p.brands?.split(",")[0]?.trim(), p.product_name?.trim()]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    if (!name) return null;
-    const tags = (p.categories_tags ?? []).join(" ");
-    return { name, category: bucketForCategory(tags) };
-  } catch {
-    return null;
-  }
-}
-
 function ScanInner({
   onClose,
   onAdd,
@@ -724,7 +660,7 @@ function ScanInner({
   >("idle");
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
-  const [product, setProduct] = useState<{ name: string; category: string } | null>(null);
+  const [product, setProduct] = useState<ScannedProduct | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const { toast } = useToast();
@@ -740,7 +676,7 @@ function ScanInner({
       setProduct(found);
     } else {
       setNotFound(true);
-      setProduct({ name: "", category: "Other" }); // manual entry
+      setProduct({ name: "", category: "Other", source: "manual" }); // manual entry
     }
   }
 
@@ -805,7 +741,7 @@ function ScanInner({
     // No camera handy — jump straight to the editable confirm card.
     setCode(null);
     setNotFound(true);
-    setProduct({ name: "", category: "Other" });
+    setProduct({ name: "", category: "Other", source: "manual" });
   }
 
   function resetScan() {
@@ -877,6 +813,13 @@ function ScanInner({
               ))}
             </Select>
           </div>
+          {product.nutrition && (
+            <NutritionFacts
+              nutrition={product.nutrition}
+              servingSize={product.servingSize}
+              nutriScore={product.nutriScore}
+            />
+          )}
         </div>
       ) : (
         <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-[var(--border)]">

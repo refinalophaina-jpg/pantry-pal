@@ -8,15 +8,31 @@ import { Sidebar, MobileNav } from "@/components/sidebar";
 import { CommandPalette } from "@/components/command-palette";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { loading, user, household } = useAuth();
+  const { loading, error, user, household } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || error) return;
     if (!user) router.replace("/sign-in");
     else if (!household) router.replace("/onboarding");
-  }, [loading, user, household, router]);
+  }, [loading, error, user, household, router]);
+
+  if (error) {
+    return (
+      <div className="min-h-screen grid place-items-center px-6">
+        <div className="max-w-sm text-center space-y-4">
+          <p className="text-sm text-[var(--text-muted)]">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-sm font-medium underline underline-offset-4"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !user || !household) {
     return (

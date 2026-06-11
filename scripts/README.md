@@ -32,11 +32,22 @@ Open data (ODbL), branded products by barcode. No key needed.
 ```bash
 node scripts/import-openfoodfacts.mjs 737628064502 3017620422003   # by barcode
 node scripts/import-openfoodfacts.mjs --search "oat milk" --pages 2 # by search
+node scripts/import-openfoodfacts.mjs --refresh                     # re-sync catalog
 ```
 
 Upserts on `barcode`. Feeds the barcode-scanner lookup
-(`lookupFoodByBarcode` in `src/lib/food-db.ts`) so scans resolve from our own
-catalog before falling back to a live API.
+(`lookupProduct` in `src/lib/barcode.ts`) so scans resolve from our own
+catalog before falling back to the live Open Food Facts API — which also
+covers brand-new products the catalog hasn't met yet.
+
+### Monthly refresh (automated)
+
+`.github/workflows/refresh-foods.yml` runs `--refresh` on the 1st of every
+month (and on demand via the Actions tab), re-fetching every cataloged
+product in batches of 100 so renames, reformulations, and newly-filled
+nutriment data flow in. **One-time setup:** add `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` as repository secrets under
+*Settings → Secrets and variables → Actions*.
 
 ## Notes
 

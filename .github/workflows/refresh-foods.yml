@@ -1,0 +1,41 @@
+name: Refresh food catalog
+
+# Keeps the `foods` table in step with Open Food Facts: once a month every
+# cataloged product is re-fetched (renames, reformulations, newly-filled
+# nutriments). Brand-new products already resolve at scan time via the live
+# OFF fallback in src/lib/barcode.ts — this job keeps the cached copies fresh.
+#
+# Requires two repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL                e.g. https://<project>.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY   service-role key (server-side only — never
+#                               ship this in client code)
+
+on:
+  schedule:
+    - cron: "17 6 1 * *" # 06:17 UTC on the 1st of every month
+  workflow_dispatch: {} # and on demand from the Actions tab
+
+concurrency:
+  group: refresh-foods
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refresh cataloged products from Open Food Facts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/import-openfoodfacts.mjs --refresh

@@ -11,6 +11,12 @@
  * Usage:
  *   node scripts/import-openfoodfacts.mjs 737628064502 3017620422003   # by barcode
  *   node scripts/import-openfoodfacts.mjs --search "oat milk" --pages 2 # by search
+ *   node scripts/import-openfoodfacts.mjs --refresh                     # re-sync catalog
+ *
+ * --refresh re-fetches every product already in `foods` (source
+ * openfoodfacts) in batches of 100 via the v2 search API, picking up
+ * renames, recipe changes, and newly-filled nutriment data. Run monthly —
+ * .github/workflows/refresh-foods.yml does exactly that.
  *
  * Idempotent: upserts on the `barcode` unique key.
  */
@@ -78,11 +84,64 @@ async function bySearch(term, pages) {
   return rows;
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Re-fetch every cataloged OFF product in batches of 100 (the v2 search API
+ * accepts comma-separated barcodes), so the monthly run stays a handful of
+ * requests instead of one per product.
+ */
+async function refreshCatalog() {
+  const all = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("foods")
+      .select("barcode")
+      .eq("source", "openfoodfacts")
+      .not("barcode", "is", null)
+      .order("barcode")
+      .range(from, from + PAGE - 1);
+    if (error) {
+      console.error("reading foods failed:", error.message);
+      process.exit(1);
+    }
+    all.push(...(data ?? []).map((r) => String(r.barcode)));
+    if (!data || data.length < PAGE) break;
+  }
+  console.log(`Refreshing ${all.length} cataloged products…`);
+
+  const rows = [];
+  const FIELDS =
+    "code,product_name,product_name_en,brands,categories,serving_size,nutriments";
+  for (let i = 0; i < all.length; i += 100) {
+    const chunk = all.slice(i, i + 100);
+    const url = `https://world.openfoodfacts.org/api/v2/search?code=${chunk.join(
+      ",",
+    )}&fields=${FIELDS}&page_size=100`;
+    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    if (!res.ok) {
+      console.warn(`batch ${i / 100 + 1}: HTTP ${res.status}, skipping`);
+      continue;
+    }
+    const json = await res.json();
+    for (const p of json.products ?? []) {
+      const r = toRow(p);
+      if (r) rows.push(r);
+    }
+    console.log(`  batch ${i / 100 + 1}/${Math.ceil(all.length / 100)}`);
+    if (i + 100 < all.length) await sleep(6500); // OFF politeness: ≤10 search req/min
+  }
+  return rows;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   let rows = [];
   const searchIdx = args.indexOf("--search");
-  if (searchIdx !== -1) {
+  if (args.includes("--refresh")) {
+    rows = await refreshCatalog();
+  } else if (searchIdx !== -1) {
     const term = args[searchIdx + 1];
     const pagesIdx = args.indexOf("--pages");
     const pages = pagesIdx !== -1 ? Number(args[pagesIdx + 1]) : 1;

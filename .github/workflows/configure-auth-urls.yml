@@ -1,0 +1,44 @@
+name: Configure Supabase auth URLs
+
+# One-off (re-runnable) job: points Supabase auth at the canonical origin and
+# allow-lists every origin the app is served from, via the Management API.
+# Uses the SUPABASE_ACCESS_TOKEN repository secret — no dashboard clicking.
+#
+# Run from the Actions tab (or `gh workflow run configure-auth-urls.yml`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: Canonical origin for auth emails/redirects
+        default: https://pantry.ainadara.com
+        required: true
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PROJECT_REF: ctmwamavavluowgmbcma
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SITE_URL: ${{ inputs.site_url }}
+    steps:
+      - name: Merge and apply auth URL configuration
+        run: |
+          set -euo pipefail
+          api="https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth"
+          auth=(-H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+
+          current=$(curl -sf "${auth[@]}" "$api" | jq -r '.uri_allow_list // ""')
+          echo "current allow-list: $current"
+
+          # Merge: keep whatever is there, ensure our origins are present.
+          want="$SITE_URL/**,https://pantry-pal.pages.dev/**,http://localhost:3000/**"
+          merged=$(printf '%s,%s' "$current" "$want" | tr ',' '\n' \
+            | sed '/^$/d' | sort -u | paste -sd, -)
+
+          jq -n --arg site "$SITE_URL" --arg list "$merged" \
+            '{site_url: $site, uri_allow_list: $list}' \
+            | curl -sf -X PATCH "${auth[@]}" -H "Content-Type: application/json" \
+                -d @- "$api" \
+            | jq '{site_url, uri_allow_list}'

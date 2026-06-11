@@ -5,10 +5,12 @@ name: Refresh food catalog
 # nutriments). Brand-new products already resolve at scan time via the live
 # OFF fallback in src/lib/barcode.ts — this job keeps the cached copies fresh.
 #
-# Requires two repository secrets (Settings → Secrets and variables → Actions):
+# Credentials (repository secrets, Settings → Secrets and variables → Actions):
 #   SUPABASE_URL                e.g. https://<project>.supabase.co
-#   SUPABASE_SERVICE_ROLE_KEY   service-role key (server-side only — never
-#                               ship this in client code)
+#   SUPABASE_SERVICE_ROLE_KEY   optional — if absent, the job resolves it at
+#                               runtime from the Management API using
+#                               SUPABASE_ACCESS_TOKEN, so the key never needs
+#                               to be copied anywhere by hand.
 
 on:
   schedule:
@@ -34,8 +36,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve service-role key
+        env:
+          EXPLICIT_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ctmwamavavluowgmbcma
+        run: |
+          set -euo pipefail
+          if [ -n "$EXPLICIT_KEY" ]; then
+            key="$EXPLICIT_KEY"
+          else
+            key=$(curl -sf -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/api-keys?reveal=true" \
+              | jq -r '[.[] | select(.name == "service_role" or .type == "secret")][0].api_key')
+          fi
+          if [ -z "$key" ] || [ "$key" = "null" ]; then
+            echo "::error::could not resolve a service-role key"; exit 1
+          fi
+          echo "::add-mask::$key"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$key" >> "$GITHUB_ENV"
+
       - name: Refresh cataloged products from Open Food Facts
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/import-openfoodfacts.mjs --refresh

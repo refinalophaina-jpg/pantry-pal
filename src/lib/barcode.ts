@@ -141,28 +141,51 @@ const OFF_FIELDS =
   "product_name,brands,categories_tags,serving_size,nutriscore_grade,nutriments";
 
 /**
+ * The same product can be keyed two ways: US scanners decode 12-digit UPC-A
+ * while databases often store the 13-digit EAN form (leading zero), and vice
+ * versa. Return the scanned code plus its sibling so a valid scan doesn't
+ * "miss" over a zero.
+ */
+export function barcodeVariants(code: string): string[] {
+  const digits = code.replace(/\D/g, "");
+  if (!digits) return [];
+  const variants = [digits];
+  if (digits.length === 12) variants.push(`0${digits}`); // UPC-A → EAN-13
+  else if (digits.length === 13 && digits.startsWith("0"))
+    variants.push(digits.slice(1)); // EAN-13 → UPC-A
+  return variants;
+}
+
+/**
  * Resolve a scanned UPC/EAN to a product with nutrition facts. Returns null
  * when unknown so the UI can offer manual entry.
  */
 export async function lookupProduct(
   code: string,
 ): Promise<ScannedProduct | null> {
+  const variants = barcodeVariants(code);
   // 1) Our own catalog first.
-  try {
-    const food = await lookupFoodByBarcode(code);
-    if (food) {
-      const scanned = scannedFromCatalog(food);
-      // The catalog import may predate nutrition columns — if it has no
-      // facts, let the live API fill them in rather than show an empty panel.
-      if (scanned.nutrition) return scanned;
-      const live = await fetchOffProduct(code);
-      return live ? { ...live, source: "openfoodfacts" } : scanned;
+  for (const v of variants) {
+    try {
+      const food = await lookupFoodByBarcode(v);
+      if (food) {
+        const scanned = scannedFromCatalog(food);
+        // The catalog import may predate nutrition columns — if it has no
+        // facts, let the live API fill them in rather than show an empty panel.
+        if (scanned.nutrition) return scanned;
+        const live = await fetchOffProduct(v);
+        return live ? { ...live, source: "openfoodfacts" } : scanned;
+      }
+    } catch {
+      // fall through to the live API
     }
-  } catch {
-    // fall through to the live API
   }
   // 2) Live Open Food Facts — covers products newer than our last import.
-  return fetchOffProduct(code);
+  for (const v of variants) {
+    const live = await fetchOffProduct(v);
+    if (live) return live;
+  }
+  return null;
 }
 
 async function fetchOffProduct(code: string): Promise<ScannedProduct | null> {

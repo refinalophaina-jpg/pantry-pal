@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes land here before the next tagged release._
 
+## [0.9.0] — 2026-06-11
+
+The "scan smarter" release: nutrition facts at scan time, a self-refreshing
+product catalog, and the end of the stuck "Loading…" screen.
+
+### Added
+- **Nutrition facts on scan:** after a barcode resolves, the confirm card shows
+  a label-style per-100g panel — calories, macros, sugars, saturated fat,
+  fiber, sodium — with serving size and the Open Food Facts Nutri-Score grade
+  when known. Catalog rows without facts are backfilled from the live API.
+- **Monthly catalog refresh:** `import-openfoodfacts.mjs --refresh` re-syncs
+  every cataloged product in batches of 100; a scheduled GitHub Action runs it
+  on the 1st of each month (needs `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`
+  repo secrets). Brand-new products already resolve at scan time via the live
+  fallback.
+- **UPC/EAN sibling lookup:** a 12-digit UPC-A scan also tries its 13-digit
+  EAN form (and vice versa), so US barcodes stop missing over a leading zero.
+- **Deploy runbook** for attaching `pantry.ainadara.com` as a Cloudflare Pages
+  custom domain (plus the required Supabase redirect-URL entry).
+
+### Fixed
+- **Stuck "Loading…" screen, both flavors.** The initial session load now runs
+  under a 12s timeout with a guaranteed settle and a visible *Try again* screen
+  on failure. And the auth-change listener no longer awaits Supabase queries
+  inside the callback — the documented supabase-js auth-lock deadlock that
+  froze the app after returning to the tab (TOKEN_REFRESHED) — the household
+  query is deferred out of the lock, and token refreshes skip the reload.
+
+### Tests
+- 23 new tests: auth bootstrap failure + resume-deadlock regressions, barcode
+  mappers and fallback order, UPC/EAN variants, and the NutritionFacts panel.
+
 ## [0.8.0] — 2026-06-03
 
 The "polish & docs" release: an accessibility test pass and a comprehensive

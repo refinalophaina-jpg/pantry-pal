@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  barcodeVariants,
   bucketForCategory,
   nutritionFromOffNutriments,
   scannedFromCatalog,
@@ -128,6 +129,26 @@ describe("scannedFromOff", () => {
   });
 });
 
+describe("barcodeVariants", () => {
+  it("pairs UPC-A with its EAN-13 sibling and back", () => {
+    expect(barcodeVariants("737628064502")).toEqual([
+      "737628064502",
+      "0737628064502",
+    ]);
+    expect(barcodeVariants("0737628064502")).toEqual([
+      "0737628064502",
+      "737628064502",
+    ]);
+  });
+
+  it("leaves EAN-8 and non-zero EAN-13 alone, drops junk", () => {
+    expect(barcodeVariants("3017620422003")).toEqual(["3017620422003"]);
+    expect(barcodeVariants("12345678")).toEqual(["12345678"]);
+    expect(barcodeVariants(" 12 34-5678 ")).toEqual(["12345678"]);
+    expect(barcodeVariants("no-digits")).toEqual([]);
+  });
+});
+
 describe("lookupProduct", () => {
   beforeEach(() => {
     h.lookupFoodByBarcode.mockReset();
@@ -198,6 +219,27 @@ describe("lookupProduct", () => {
       }),
     );
     expect(await lookupProduct("404")).toBeNull();
+  });
+
+  it("finds a product stored under the EAN-13 sibling of the scanned UPC-A", async () => {
+    h.lookupFoodByBarcode.mockImplementation(async (code: string) =>
+      code === "0737628064502"
+        ? {
+            id: "f2",
+            name: "Rice Noodles",
+            category: "grains",
+            calories: 364,
+            source: "openfoodfacts",
+          }
+        : null,
+    );
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const s = await lookupProduct("737628064502");
+    expect(s?.name).toBe("Rice Noodles");
+    expect(h.lookupFoodByBarcode).toHaveBeenCalledWith("737628064502");
+    expect(h.lookupFoodByBarcode).toHaveBeenCalledWith("0737628064502");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("survives a catalog error and a network error", async () => {

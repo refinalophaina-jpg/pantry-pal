@@ -21,6 +21,25 @@ This is the no-CLI path. Once set up, every push to `main` auto-deploys.
    - Supabase dashboard → Authentication → URL Configuration → **Site URL** = your `*.pages.dev` URL
    - Add the same URL to **Redirect URLs**
 
+## Custom domain — pantry.ainadara.com
+
+`ainadara.com` is already a Cloudflare zone (same account as the Pages
+project), so attaching the subdomain is two steps, no DNS records to write by
+hand:
+
+1. **Cloudflare:** dash.cloudflare.com → **Workers & Pages → pantry-pal →
+   Custom domains → Set up a custom domain** → enter `pantry.ainadara.com`.
+   Because the zone lives in the same account, Cloudflare creates and
+   activates the CNAME for you (usually under a minute).
+2. **Supabase:** dashboard → Authentication → **URL Configuration** → add
+   `https://pantry.ainadara.com` to **Redirect URLs** (and switch **Site URL**
+   to it if you want it to be the canonical origin). Without this, sign-in
+   links and OAuth redirects from the new domain are rejected.
+
+Nothing in the app itself needs to change — the build is origin-agnostic
+(relative manifest `start_url`, no hardcoded URLs), and `*.pages.dev` keeps
+working alongside the subdomain.
+
 ## Option B — GitHub Actions (optional)
 
 If you want CI-driven deploys instead of the dashboard integration, this repo can run a `cloudflare/wrangler-action` workflow. It's not committed yet because the current token lacks the `workflow` scope. To enable:

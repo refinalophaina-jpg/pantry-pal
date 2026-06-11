@@ -19,6 +19,7 @@ export interface HouseholdInfo {
 
 interface AuthState {
   loading: boolean;
+  error: string | null;
   session: Session | null;
   user: User | null;
   household: HouseholdInfo | null;
@@ -67,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [household, setHousehold] = useState<HouseholdInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const loadHousehold = useCallback(async (userId: string) => {
     const supabase = getSupabase();
@@ -90,25 +92,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const supabase = getSupabase();
     let cancelled = false;
-
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (cancelled) return;
-      setSession(data.session);
-      if (data.session?.user) {
-        await loadHousehold(data.session.user.id);
-      }
+    let supabase: ReturnType<typeof getSupabase>;
+    try {
+      supabase = getSupabase();
+    } catch (e) {
+      // Missing/invalid config — surface it instead of hanging on "Loading…".
+      setError(e instanceof Error ? e.message : "Failed to initialize.");
       setLoading(false);
-    });
+      return;
+    }
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, sess) => {
-      setSession(sess);
-      if (sess?.user) {
-        await loadHousehold(sess.user.id);
-      } else {
-        setHousehold(null);
+    // The initial session load gates the whole app. Without a timeout/catch a
+    // stalled refresh (expired token, dropped connection, WebView blocking the
+    // request) would leave `loading` true forever and pin the user on "Loading…".
+    (async () => {
+      try {
+        const { data } = await withTimeout(
+          supabase.auth.getSession(),
+          "Loading your session",
+        );
+        if (cancelled) return;
+        setSession(data.session);
+        if (data.session?.user) {
+          await withTimeout(
+            loadHousehold(data.session.user.id),
+            "Loading your household",
+          );
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setError(
+          e instanceof Error ? e.message : "Couldn't reach the server.",
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    })();
+
+    // IMPORTANT: this callback must stay synchronous. supabase-js holds the
+    // auth lock while invoking it; awaiting another Supabase call here (which
+    // itself needs that lock) deadlocks the client — on tab resume the
+    // TOKEN_REFRESHED event would freeze every later request and pin the app
+    // on "Loading…". Defer queries out of the callback with setTimeout.
+    const { data: sub } = supabase.auth.onAuthStateChange((evt, sess) => {
+      setSession(sess);
+      if (!sess?.user) {
+        setHousehold(null);
+        return;
+      }
+      // Membership can't change from a token refresh — skip the reload churn.
+      if (evt === "TOKEN_REFRESHED") return;
+      const uid = sess.user.id;
+      setTimeout(() => {
+        if (!cancelled) void loadHousehold(uid);
+      }, 0);
     });
 
     return () => {
@@ -207,6 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthCtx.Provider
       value={{
         loading,
+        error,
         session,
         user: session?.user ?? null,
         household,

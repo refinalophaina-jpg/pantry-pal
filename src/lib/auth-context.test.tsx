@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthProvider, useAuth } from "./auth-context";
 
@@ -33,10 +33,11 @@ vi.mock("./supabase", () => ({
 }));
 
 function Probe() {
-  const { loading, user, household, signIn, signOut } = useAuth();
+  const { loading, error, user, household, signIn, signOut } = useAuth();
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
+      <span data-testid="error">{error ?? "none"}</span>
       <span data-testid="user">{user?.email ?? "none"}</span>
       <span data-testid="household">{household?.name ?? "none"}</span>
       <button onClick={() => signIn("a@b.co", "pw")}>signin</button>
@@ -90,6 +91,15 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("household")).toHaveTextContent("The Kitchen");
   });
 
+  it("settles to an error (not an infinite spinner) when the session load fails", async () => {
+    h.auth.getSession.mockRejectedValue(new Error("network is down"));
+    renderAuth();
+    await waitFor(() =>
+      expect(screen.getByTestId("loading")).toHaveTextContent("false"),
+    );
+    expect(screen.getByTestId("error")).toHaveTextContent("network is down");
+  });
+
   it("signIn calls Supabase with the credentials", async () => {
     h.auth.signInWithPassword.mockResolvedValue({ error: null });
     renderAuth();
@@ -110,6 +120,57 @@ describe("AuthProvider", () => {
     );
     await userEvent.click(screen.getByText("signout"));
     expect(h.auth.signOut).toHaveBeenCalled();
+  });
+
+  it("auth-change callback is synchronous and defers the household query (no auth-lock deadlock)", async () => {
+    renderAuth();
+    await waitFor(() =>
+      expect(screen.getByTestId("loading")).toHaveTextContent("false"),
+    );
+    const cb = (h.auth.onAuthStateChange.mock.calls as unknown[][])[0][0] as (
+      evt: string,
+      sess: unknown,
+    ) => unknown;
+    h.household.current = {
+      data: { role: "member", household: { id: "hh2", name: "Resumed Home" } },
+      error: null,
+    };
+    let ret: unknown;
+    act(() => {
+      // supabase-js holds the auth lock while this runs — it must not return
+      // a promise that performs Supabase work before resolving.
+      ret = cb("SIGNED_IN", { user: { id: "u2", email: "back@home.test" } });
+    });
+    expect(ret).toBeUndefined(); // synchronous, nothing awaited in-lock
+    await waitFor(() =>
+      expect(screen.getByTestId("household")).toHaveTextContent("Resumed Home"),
+    );
+  });
+
+  it("TOKEN_REFRESHED keeps the session but skips the household reload", async () => {
+    h.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: "u1", email: "cook@home.test" } } },
+    });
+    h.household.current = {
+      data: { role: "owner", household: { id: "hh1", name: "The Kitchen" } },
+      error: null,
+    };
+    renderAuth();
+    await waitFor(() =>
+      expect(screen.getByTestId("household")).toHaveTextContent("The Kitchen"),
+    );
+    const cb = (h.auth.onAuthStateChange.mock.calls as unknown[][])[0][0] as (
+      evt: string,
+      sess: unknown,
+    ) => unknown;
+    // If a refresh re-queried, this poisoned result would clobber the state.
+    h.household.current = { data: null, error: { message: "boom" } };
+    act(() => {
+      cb("TOKEN_REFRESHED", { user: { id: "u1", email: "cook@home.test" } });
+    });
+    // Deferred work gets a chance to run; household must remain intact.
+    await new Promise((r) => setTimeout(r, 10));
+    expect(screen.getByTestId("household")).toHaveTextContent("The Kitchen");
   });
 
   it("useAuth throws outside the provider", () => {

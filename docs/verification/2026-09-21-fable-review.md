@@ -73,7 +73,7 @@ assertions); the service-worker component test passes; `npm run build` produces 
 - **Hub**: ainadara-site#3 merged; `ainadara.com` lists Pantry as a live thread. **Infra**: ainadara-infra#1 merged.
 - **Dependency refresh** (23:04–23:14 UTC): Dependabot #2–#9 merged one at a time on green checks; Dependabot rebased #4 and #6 after conflicts with earlier merges, and the staging deploy verified serving after each merge.
 - **Tag and Release** (23:20 UTC): tag pushes from the agent session are refused by its git egress policy (HTTP 403 on the receive-pack call; branch pushes and API merges work), so #13 added `.github/workflows/release.yml`, a dispatch that creates the annotated tag and the GitHub Release and refuses a version/commit mismatch. Run [35667098281](https://github.com/refinalophaina-jpg/pantry-pal/actions/runs/35667098281) tagged `v0.10.0` at `b91f513` and published [Pantry Pal v0.10.0](https://github.com/refinalophaina-jpg/pantry-pal/releases/tag/v0.10.0).
-- **Production after the refresh**: run [35667100146](https://github.com/refinalophaina-jpg/pantry-pal/actions/runs/35667100146) deployed `main` `236a94e` (build `BUILD_TBD`); verified from outside: `/version.json`, `/sw.js` and `/api/health` report that build and commit.
+- **Production after the refresh**: run [35667100146](https://github.com/refinalophaina-jpg/pantry-pal/actions/runs/35667100146) deployed `main` `236a94e` (build `fc5ff8879ef5d272`); verified from outside: `/version.json`, `/sw.js` and `/api/health` report that build and commit.
 
 ### New finding: R-8 — the estate uptime monitor cannot see past Cloudflare's bot challenge (pre-existing)
 

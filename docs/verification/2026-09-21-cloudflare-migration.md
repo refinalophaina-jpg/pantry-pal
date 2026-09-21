@@ -108,8 +108,12 @@ expires after 24 hours; full offline editing and guest-to-account household
 transfer are outside this release.
 
 The scheduled catalog trigger is configured and its handler is tested. A natural
-production cron invocation had not occurred at cutover; inspect `catalog_jobs`
-after the first hourly tick. The legacy Pages origin remains a historical
+production cron invocation had not occurred at cutover. **Verified 2026-09-21 by
+the owner:** after the first hourly tick, the production `catalog_jobs` row for
+`openfoodfacts` read `last_status = ok`, so the scheduled handler runs on the live
+Worker, takes and releases its lease, and records its counters. Later ticks are
+observed the same way (`last_started_at`, `last_finished_at`, `last_status`,
+`requested`, `updated`, `missing`). The legacy Pages origin remains a historical
 rollback reference, not a second write authority.
 
 ## Reproduction and rollback

@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Browser journeys run in CI against a local Worker + D1 (non-blocking while bedding in).
 - Maskable 512 px icon for Android adaptive launchers; the build validates every manifest icon.
 - Service worker registration skips non-http origins (native shells); Actions on v5, `engines.node >= 24`, Dependabot.
+- Release-tag workflow (`.github/workflows/release.yml`): `v<version>` annotated tag plus a GitHub Release built from the CHANGELOG section, refused on a version/commit mismatch.
 
 ## [0.10.0] — 2026-09-21
 

@@ -215,7 +215,8 @@ The production cron is hourly at minute 17 UTC. Each run refreshes a bounded bat
 of up to 100 stale Open Food Facts rows; `catalog_jobs` records status and counts.
 Check `last_started_at`, `last_finished_at`, `last_status`, `requested`, `updated`,
 and `missing`, plus the sanitized `catalog_refresh` log event. A scheduled trigger
-in configuration is not evidence of a successful production run.
+in configuration is not evidence of a successful production run; the first natural
+production tick was read from `catalog_jobs` on 2026-09-21 and reported `ok`.
 
 Native Capacitor/Tauri builds and store distribution remain a separate track;
 web deployment does not complete [P4](docs/plans/2026-09-20-plan4-native-shells.md).

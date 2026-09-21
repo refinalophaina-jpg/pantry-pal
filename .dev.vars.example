@@ -1,0 +1,4 @@
+# Copy to .dev.vars and replace this with at least 32 random characters.
+BETTER_AUTH_SECRET=local-development-replace-with-a-random-secret
+# Optional; World recipes and curated collections work without this provider.
+# SPOONACULAR_API_KEY=

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useId } from "react";
 import {
   Bookmark,
   BookmarkCheck,
@@ -15,8 +15,11 @@ import {
   Plus,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
+import { FoodVisual } from "./food-visual";
+import { prepNotes } from "@/lib/prep-recipes";
 import type { Recipe } from "@/lib/types";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, availableQuantity } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import { estimateRecipeNutrition, type RecipeNutrition } from "@/lib/nutrition";
 import { useToast } from "@/components/toast";
@@ -35,8 +38,11 @@ export function RecipeDetail({
 }: {
   recipe: Recipe;
   onClose: () => void;
-  onCook?: () => void;
+  onCook?: (recipe: Recipe) => void;
 }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  useEffect(() => { const previous = document.activeElement as HTMLElement | null; if (dialog.current?.showModal) dialog.current.showModal(); else dialog.current?.setAttribute("open", ""); return () => { if(previous?.isConnected) previous.focus(); }; }, []);
   const pantry = useAppStore((s) => s.pantry);
   const savedRecipes = useAppStore((s) => s.savedRecipes);
   const { saveRecipe, unsaveRecipe, generateFromRecipe } = useSyncedActions();
@@ -50,7 +56,7 @@ export function RecipeDetail({
   const scale = servings / baseServings;
 
   useEffect(() => {
-    if (recipe.calories) return; // already computed/saved
+    if (recipe.calories !== undefined) return; // already computed/saved
     let cancelled = false;
     estimateRecipeNutrition(recipe)
       .then((n) => {
@@ -62,10 +68,11 @@ export function RecipeDetail({
     };
   }, [recipe]);
 
-  const cal = recipe.calories ?? nutrition?.perServing.calories;
-  const protein = recipe.proteinG ?? nutrition?.perServing.proteinG;
-  const carbs = recipe.carbsG ?? nutrition?.perServing.carbsG;
-  const fat = recipe.fatG ?? nutrition?.perServing.fatG;
+  const cal = recipe.calories ?? (nutrition?.knownIngredients ? nutrition.perServing.calories : undefined);
+  const protein = recipe.proteinG ?? (nutrition?.knownIngredients ? nutrition.perServing.proteinG : undefined);
+  const carbs = recipe.carbsG ?? (nutrition?.knownIngredients ? nutrition.perServing.carbsG : undefined);
+  const fat = recipe.fatG ?? (nutrition?.knownIngredients ? nutrition.perServing.fatG : undefined);
+  const notes = prepNotes[recipe.id] ?? Object.entries(prepNotes).find(([id]) => recipe.externalId?.startsWith(id))?.[1];
   const partial =
     !recipe.calories &&
     nutrition &&
@@ -88,10 +95,7 @@ export function RecipeDetail({
   // How much of this recipe the pantry already covers (non-optional only).
   const required = recipe.ingredients.filter((i) => !i.optional);
   const haveCount = required.filter((ing) => {
-    const owned = pantry.find(
-      (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
-    );
-    return owned && owned.quantity >= ing.quantity * scale;
+    return availableQuantity(pantry, ing.name, ing.unit) >= ing.quantity * scale;
   }).length;
   const haveTotal = required.length;
   const havePct = haveTotal ? Math.round((haveCount / haveTotal) * 100) : 0;
@@ -99,13 +103,7 @@ export function RecipeDetail({
 
   // A recipe is "saved" when there's a savedRecipes entry that matches it.
   // We match by externalId first (e.g. MealDB id), then by name.
-  const saved = recipe.savedId
-    ? recipe
-    : savedRecipes.find(
-        (r) =>
-          (recipe.externalId && r.externalId === recipe.externalId) ||
-          r.name.toLowerCase() === recipe.name.toLowerCase(),
-      );
+  const saved = savedRecipes.find(r => r.id === recipe.id || (recipe.externalId && r.externalId === recipe.externalId) || r.name.toLowerCase() === recipe.name.toLowerCase());
   const isSaved = !!saved;
 
   async function toggleSave() {
@@ -127,7 +125,7 @@ export function RecipeDetail({
   async function addMissing() {
     setBusy(true);
     try {
-      await generateFromRecipe(recipe.id);
+      await generateFromRecipe(recipe, servings);
       toast(`Missing ingredients added to shopping list.`);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed", "warn");
@@ -136,60 +134,21 @@ export function RecipeDetail({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
-      onClick={onClose}
-    >
+    <dialog ref={dialog} aria-labelledby={titleId} aria-modal="true" onCancel={e=>{e.preventDefault();onClose();}} className="fixed inset-0 z-50 m-0 h-dvh max-h-none w-screen max-w-none bg-black/60 p-4 text-[var(--text)] open:grid open:place-items-center" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div
         className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 z-10 size-9 rounded-full bg-black/40 backdrop-blur text-white grid place-items-center hover:bg-black/60 cursor-pointer"
+          className="absolute right-4 top-4 z-10 size-11 rounded-full bg-black/40 backdrop-blur text-white grid place-items-center hover:bg-black/60 cursor-pointer"
           aria-label="Close"
         >
           <X className="size-5" />
         </button>
 
-        {recipe.imageUrl ? (
-          <div className="relative aspect-[16/9] w-full overflow-hidden rounded-t-2xl bg-[var(--bg)]">
-            <Image
-              src={recipe.imageUrl}
-              alt={recipe.name}
-              fill
-              sizes="(max-width: 768px) 100vw, 768px"
-              className="object-cover"
-              unoptimized
-            />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-6 text-white">
-              <h2 className="text-2xl sm:text-3xl font-semibold leading-tight">
-                {recipe.name}
-              </h2>
-              <p className="text-sm text-white/80 mt-1">
-                {recipe.description}
-              </p>
-            </div>
-          </div>
-        ) : (
-          // Recipes without a photo (built-ins) get a warm gradient header so
-          // the modal looks intentional rather than a bare text block.
-          <div
-            className="relative overflow-hidden rounded-t-2xl px-6 sm:px-8 py-10 text-white"
-            style={{
-              backgroundImage:
-                "linear-gradient(135deg, #cc785c 0%, #4a3d7a 100%)",
-            }}
-          >
-            <ChefHat className="absolute -right-3 -bottom-4 size-32 text-white/10" />
-            <h2 className="relative text-2xl sm:text-3xl font-semibold leading-tight pr-10">
-              {recipe.name}
-            </h2>
-            <p className="relative text-sm text-white/85 mt-1 max-w-lg">
-              {recipe.description}
-            </p>
-          </div>
-        )}
+        <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} />
+        <div className="px-6 pt-5"><h2 id={titleId} className="text-2xl font-semibold pr-10">{recipe.name}</h2><p className="text-sm text-[var(--text-muted)] mt-2">{recipe.description}</p></div>
 
         <div className="p-6 sm:p-8">
 
@@ -207,7 +166,7 @@ export function RecipeDetail({
                 aria-label="Fewer servings"
                 onClick={() => setServings((s) => Math.max(1, s - 1))}
                 disabled={servings <= 1}
-                className="size-5 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] disabled:opacity-40 cursor-pointer"
+                className="size-11 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] disabled:opacity-40 cursor-pointer"
               >
                 −
               </button>
@@ -218,7 +177,7 @@ export function RecipeDetail({
                 type="button"
                 aria-label="More servings"
                 onClick={() => setServings((s) => Math.min(99, s + 1))}
-                className="size-5 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
+                className="size-11 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
               >
                 +
               </button>
@@ -287,7 +246,7 @@ export function RecipeDetail({
               <Plus className="size-4" /> Add missing to list
             </Button>
             {onCook && (
-              <Button variant="secondary" onClick={onCook}>
+              <Button variant="secondary" onClick={() => onCook({ ...recipe, servings, ingredients: recipe.ingredients.map((ing) => ({ ...ing, quantity: ing.quantity * scale })) })}>
                 <ChefHat className="size-4" /> Cook now
               </Button>
             )}
@@ -313,14 +272,16 @@ export function RecipeDetail({
             )}
           </div>
 
+          <nav aria-label="Recipe connections" className="flex flex-wrap gap-4 mb-6 text-sm underline underline-offset-4 text-[var(--accent-hover)]">
+            <Link href="/shopping/" onClick={onClose} className="min-h-11 inline-flex items-center">Open shopping list</Link>
+            <Link href="/pantry/" onClick={onClose} className="min-h-11 inline-flex items-center">Check pantry</Link>
+            <Link href="/recipes/" onClick={onClose} className="min-h-11 inline-flex items-center">My recipes</Link>
+          </nav>
           <Section title="Ingredients">
             <ul className="space-y-1.5 text-sm">
               {recipe.ingredients.map((ing, i) => {
-                const owned = pantry.find(
-                  (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
-                );
-                const sufficient =
-                  owned && owned.quantity >= ing.quantity * scale;
+                const owned = availableQuantity(pantry, ing.name, ing.unit);
+                const sufficient = owned >= ing.quantity * scale;
                 return (
                   <li
                     key={`${ing.name}-${i}`}
@@ -341,8 +302,7 @@ export function RecipeDetail({
                       <Badge tone="fresh">have</Badge>
                     ) : owned ? (
                       <Badge tone="soon">
-                        only {owned.quantity}
-                        {owned.unit}
+                        only {fmtQty(owned)} {ing.unit}
                       </Badge>
                     ) : (
                       <Badge tone="expired">missing</Badge>
@@ -353,6 +313,8 @@ export function RecipeDetail({
             </ul>
           </Section>
 
+          {notes && <Section title="Make this batch work harder"><details><summary className="min-h-11 cursor-pointer font-medium text-sm">Prep, finishing touches & swaps</summary><div className="space-y-3 text-sm leading-relaxed"><p><strong>Prep:</strong> {notes.prep}</p><p><strong>At serving:</strong> {notes.finish}</p><p><strong>Swap:</strong> {notes.swaps}</p><p><strong>Nutrition:</strong> {notes.nutrition}</p><Link href="/prep/" onClick={onClose} className="underline inline-flex min-h-11 items-center">Batch storage & reheating guidance</Link></div></details></Section>}
+          {recipe.externalId && /^\d+$/.test(recipe.externalId) && <p className="text-xs text-[var(--text-muted)] mb-4">TheMealDB recipe. Time, difficulty and four-serving baseline are estimates; check the original source for ingredient measures.</p>}
           <Section title="Steps">
             <ol className="space-y-3 text-sm">
               {recipe.steps.map((s, i) => (
@@ -366,8 +328,9 @@ export function RecipeDetail({
             </ol>
           </Section>
 
-          {(cal || protein || carbs || fat) && (
-            <Section title="Per serving">
+          {(cal !== undefined || nutrition) && (
+            <Section title={partial ? "Estimated subtotal per serving" : "Estimated nutrition per serving"}>
+              {nutrition?.knownIngredients === 0 && <p className="text-sm">Not enough matched weights to calculate nutrition.</p>}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 {[
                   ["Calories", cal, " kcal"],
@@ -391,18 +354,14 @@ export function RecipeDetail({
                     </div>
                   ))}
               </div>
-              {partial && (
-                <p className="text-[11px] text-[var(--text-muted)] mt-2">
-                  * Estimated from {nutrition?.knownIngredients} of{" "}
-                  {nutrition?.totalIngredients} ingredients (built-in
-                  nutrition table). Save the recipe to refine later.
-                </p>
-              )}
+              <p className="text-xs text-[var(--text-muted)] mt-3">{nutrition ? `${nutrition.knownIngredients} of ${nutrition.totalIngredients} required ingredients included. ` : "Recipe-provided values; source methods may vary. "}Optional ingredients and sides are excluded. {partial ? "This subtotal can be substantially below the whole meal; missing values are not zero." : "Actual brands, weights and cooking methods change the result."}</p>
+              {!!nutrition?.missingIngredients?.length && <p className="text-xs mt-2">Not counted (unknown match or weight): {nutrition.missingIngredients.join(', ')}.</p>}
+              <Link className="text-xs underline inline-flex min-h-11 items-center" href="/food-guide/" onClick={onClose}>Nutrition sources & how estimates work</Link>
             </Section>
           )}
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 

@@ -1,8 +1,8 @@
-import { getSupabase } from "./supabase";
+import { apiRequest } from "./api-client";
 import type { Recipe, UnitType } from "./types";
 
 /**
- * Spoonacular recipe search, proxied through the `recipe-search` Edge Function
+ * Spoonacular recipe search, proxied through the Workers recipe-search route
  * (the API key stays server-side). Results are mapped onto our Recipe type so
  * the rest of the app (RecipeDetail, save, pantry matching) works unchanged.
  */
@@ -81,12 +81,8 @@ export function toRecipe(r: SpoonResult): Recipe {
 }
 
 async function call(body: Record<string, unknown>): Promise<Recipe[]> {
-  const { data, error } = await getSupabase().functions.invoke("recipe-search", {
-    body,
-  });
-  if (error) throw new Error(error.message || "Recipe search failed.");
-  if (data?.error) throw new Error(data.error);
-  return ((data?.items ?? []) as SpoonResult[]).map(toRecipe);
+  const data = await apiRequest<{ items: SpoonResult[] }>("/api/recipes/search", { method: "POST", body });
+  return data.items.map(toRecipe);
 }
 
 export function searchRecipes(opts: {

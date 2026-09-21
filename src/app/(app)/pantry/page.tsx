@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import { FoodVisual } from "@/components/food-visual";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -11,9 +13,11 @@ import {
   Pencil,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { sortPantry, type SortMode } from "@/lib/pantry-sort";
+import { QuantityStepper } from "@/components/quantity-stepper";
 import { useSyncedActions } from "@/lib/data-sync";
 import { useAuth } from "@/lib/auth-context";
-import { getSupabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api-client";
 import {
   Badge,
   Button,
@@ -50,28 +54,6 @@ const CATEGORIES = [
   "Beverages",
   "Other",
 ];
-
-export type SortMode = "expiry" | "name" | "added";
-
-/** Sort pantry items by soonest expiry (no-expiry last), name, or newest first. */
-export function sortPantry(items: PantryItem[], mode: SortMode): PantryItem[] {
-  const copy = [...items];
-  if (mode === "name") {
-    return copy.sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-    );
-  }
-  if (mode === "added") {
-    // Most recently added first; ties keep stable order.
-    return copy.sort((a, b) => (b.addedOn ?? "").localeCompare(a.addedOn ?? ""));
-  }
-  // expiry: soonest first, items without an expiry sorted to the end.
-  return copy.sort((a, b) => {
-    const ad = a.expiresOn ?? "9999-99-99";
-    const bd = b.expiresOn ?? "9999-99-99";
-    return ad.localeCompare(bd);
-  });
-}
 
 export default function PantryPage() {
   const pantry = useAppStore((s) => s.pantry);
@@ -234,7 +216,7 @@ export default function PantryPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="font-medium">{item.name}</div>
+                    <div className="flex items-center gap-2"><FoodVisual name={item.name} compact /><div className="font-medium">{item.name}</div></div>
                     <div className="text-xs text-[var(--text-muted)]">
                       {item.category} · {item.zone}
                     </div>
@@ -310,24 +292,23 @@ export default function PantryPage() {
       <AddItemModal
         open={open === "add"}
         onClose={() => setOpen(null)}
-        onAdd={(item) => {
+        onAdd={(item) =>
           run(() => addPantryItem(item), {
             success: `${item.name} added to ${item.zone}.`,
             error: "Couldn't add the item — try again.",
-          });
-        }}
+          })
+        }
       />
       <EditItemModal
         item={editing}
         onClose={() => setEditing(null)}
-        onSave={(patch) => {
-          if (editing) {
-            run(() => updatePantryItem(editing.id, patch), {
+        onSave={(patch) => editing
+          ? run(() => updatePantryItem(editing.id, patch), {
               success: `${editing.name} updated.`,
               error: "Couldn't save changes — try again.",
-            });
-          }
-        }}
+            })
+          : Promise.resolve(false)
+        }
       />
       <ScanModal
         open={open === "scan"}
@@ -343,67 +324,6 @@ export default function PantryPage() {
   );
 }
 
-/**
- * Inline +/- quantity control. Updates optimistically and debounces the write
- * so rapid taps coalesce into one save. Stays in sync if the item changes from
- * elsewhere (realtime) while idle.
- */
-export function QuantityStepper({
-  quantity,
-  unit,
-  onChange,
-}: {
-  quantity: number;
-  unit: string;
-  onChange: (q: number) => void;
-}) {
-  const [qty, setQty] = useState(quantity);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setQty(quantity);
-  }, [quantity]);
-
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-
-  function step(delta: number) {
-    setQty((q) => {
-      const next = Math.max(0, Math.round((q + delta) * 100) / 100);
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => onChange(next), 500);
-      return next;
-    });
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        aria-label="Decrease quantity"
-        onClick={() => step(-1)}
-        disabled={qty <= 0}
-        className="size-7 grid place-items-center rounded-lg border border-[var(--border)] hover:bg-[var(--bg)] disabled:opacity-40 cursor-pointer"
-      >
-        <Minus className="size-3.5" />
-      </button>
-      <span className="text-xl font-semibold tabular-nums min-w-[2ch] text-center">
-        {qty}
-      </span>
-      <button
-        type="button"
-        aria-label="Increase quantity"
-        onClick={() => step(1)}
-        className="size-7 grid place-items-center rounded-lg border border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
-      >
-        <Plus className="size-3.5" />
-      </button>
-      <span className="text-sm text-[var(--text-muted)]">{unit}</span>
-    </div>
-  );
-}
-
 function AddItemModal({
   open,
   onClose,
@@ -411,7 +331,7 @@ function AddItemModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
+  onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => Promise<boolean>;
 }) {
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -419,25 +339,26 @@ function AddItemModal({
   const [zone, setZone] = useState<StorageZone>("pantry");
   const [category, setCategory] = useState("Other");
   const [expiresOn, setExpiresOn] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function submit() {
-    if (!name.trim()) return;
-    onAdd({
-      name: name.trim(),
-      quantity,
-      unit,
-      zone,
-      category,
-      expiresOn: expiresOn || undefined,
-    });
-    setName("");
-    setQuantity(1);
-    setExpiresOn("");
-    onClose();
+  async function submit() {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      const saved = await onAdd({
+        name: name.trim(), quantity, unit, zone, category,
+        expiresOn: expiresOn || undefined,
+      });
+      if (!saved) return;
+      setName("");
+      setQuantity(1);
+      setExpiresOn("");
+      onClose();
+    } finally { setSaving(false); }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add pantry item">
+    <Modal open={open} onClose={() => { if (!saving) onClose(); }} title="Add pantry item">
       <div className="space-y-3">
         <IngredientAutocomplete
           autoFocus
@@ -502,10 +423,10 @@ function AddItemModal({
           />
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={submit}>Add</Button>
+          <Button onClick={submit} disabled={saving}>{saving ? "Adding…" : "Add"}</Button>
         </div>
       </div>
     </Modal>
@@ -535,7 +456,7 @@ function EditItemModal({
 }: {
   item: PantryItem | null;
   onClose: () => void;
-  onSave: (patch: Partial<PantryItem>) => void;
+  onSave: (patch: Partial<PantryItem>) => Promise<boolean>;
 }) {
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -544,6 +465,7 @@ function EditItemModal({
   const [category, setCategory] = useState("Other");
   const [expiresOn, setExpiresOn] = useState("");
   const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!item) return;
@@ -556,22 +478,20 @@ function EditItemModal({
     setNotes(item.notes ?? "");
   }, [item]);
 
-  function submit() {
-    if (!item) return;
-    onSave({
-      name: name.trim() || item.name,
-      quantity,
-      unit,
-      zone,
-      category,
-      expiresOn: expiresOn || undefined,
-      notes: notes || undefined,
-    });
-    onClose();
+  async function submit() {
+    if (!item || saving) return;
+    setSaving(true);
+    try {
+      const saved = await onSave({
+        name: name.trim() || item.name,
+        quantity, unit, zone, category, expiresOn, notes,
+      });
+      if (saved) onClose();
+    } finally { setSaving(false); }
   }
 
   return (
-    <Modal open={item !== null} onClose={onClose} title="Edit item">
+    <Modal open={item !== null} onClose={() => { if (!saving) onClose(); }} title="Edit item">
       <div className="space-y-3">
         <Input value={name} onChange={(e) => setName(e.target.value)} />
         <div className="grid grid-cols-2 gap-3">
@@ -636,10 +556,10 @@ function EditItemModal({
           />
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={submit}>Save</Button>
+          <Button onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
         </div>
       </div>
     </Modal>
@@ -889,41 +809,39 @@ function PhotoModal({
   onClose: () => void;
   onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
 }) {
-  const { household } = useAuth();
+  const { household, user } = useAuth();
   const [detected, setDetected] = useState<
-    Array<{ name: string; category: string; include: boolean }>
+    Array<{ id: string; name: string; category: string; include: boolean }>
   >([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const generation = useRef(0);
+  useEffect(() => {
+    generation.current++;
+    setDetected([]);
+    setError(null);
+    setAnalyzing(false);
+    setSaving(false);
+    return () => { generation.current++; };
+  }, [open, household?.id, user?.id]);
 
   async function analyze(file: File) {
+    const revision = generation.current;
     setAnalyzing(true);
     setError(null);
     setDetected([]);
     try {
-      const supabase = getSupabase();
+      if (!household) throw new Error("Choose a household before analyzing a photo.");
+      if (file.size > 5 * 1024 * 1024) throw new Error("Choose a photo smaller than 5 MB.");
       const base64 = await fileToBase64(file);
+      if (revision !== generation.current) return;
       const mediaType = file.type || "image/jpeg";
-
-      // Store the photo (best-effort, household-scoped) — recognition doesn't
-      // depend on the upload succeeding.
-      if (household) {
-        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-        void supabase.storage
-          .from("pantry-photos")
-          .upload(`${household.id}/${uid()}.${ext}`, file, {
-            contentType: mediaType,
-          });
-      }
-
-      const { data, error: fnError } = await supabase.functions.invoke(
-        "recognize-pantry",
-        { body: { imageBase64: base64, mediaType } },
-      );
-      if (fnError) throw new Error(fnError.message || "Recognition failed.");
-      if (data?.error) throw new Error(data.error);
+      const data = await apiRequest<{ items: Array<{ name: string; category: string }> }>("/api/pantry/recognize", {
+        method: "POST", body: { householdId: household.id, imageBase64: base64, mediaType }, timeoutMs: 45_000,
+      });
+      if (revision !== generation.current) return;
 
       const items = (data?.items ?? []) as Array<{
         name: string;
@@ -932,12 +850,12 @@ function PhotoModal({
       if (items.length === 0) {
         setError("No food items detected — try a clearer, closer photo.");
       } else {
-        setDetected(items.map((i) => ({ ...i, include: true })));
+        setDetected(items.map((i) => ({ ...i, id: uid(), include: true })));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't analyze the photo.");
+      if (revision === generation.current) setError(e instanceof Error ? e.message : "Couldn't analyze the photo.");
     } finally {
-      setAnalyzing(false);
+      if (revision === generation.current) setAnalyzing(false);
     }
   }
 
@@ -946,11 +864,14 @@ function PhotoModal({
   }
 
   async function commit() {
+    if (saving) return;
+    const revision = generation.current;
     const chosen = detected.filter((d) => d.include && d.name.trim());
     if (chosen.length === 0) return;
     setSaving(true);
     try {
       for (const it of chosen) {
+        if (revision !== generation.current) return;
         await onAdd({
           name: it.name.trim(),
           category: it.category,
@@ -958,14 +879,17 @@ function PhotoModal({
           unit: "pcs",
           zone: "fridge",
         });
+        if (revision !== generation.current) return;
+        // Retrying a partial failure must not insert already confirmed rows again.
+        setDetected((items) => items.filter((item) => item.id !== it.id));
       }
       toast(`Added ${chosen.length} item${chosen.length === 1 ? "" : "s"} from photo.`);
       setDetected([]);
       onClose();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Couldn't add items.", "warn");
+      if (revision === generation.current) toast(e instanceof Error ? e.message : "Couldn't add remaining items.", "warn");
     } finally {
-      setSaving(false);
+      if (revision === generation.current) setSaving(false);
     }
   }
 
@@ -977,7 +901,7 @@ function PhotoModal({
         <>
           <p className="text-sm text-[var(--text-muted)] mb-3">
             Snap or upload a photo of your groceries or fridge — it&apos;s
-            scanned with Claude, and you confirm everything before it&apos;s
+            analyzed with Cloudflare Workers AI, and you confirm everything before it&apos;s
             added.
           </p>
           <label className="border-2 border-dashed border-[var(--border)] rounded-lg p-6 text-center mb-1 block cursor-pointer hover:bg-[var(--bg)] aria-disabled:opacity-60">
@@ -1010,19 +934,22 @@ function PhotoModal({
           </div>
           <div className="space-y-2 max-h-[50vh] overflow-y-auto mb-3 pr-1">
             {detected.map((d, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={d.id} className="flex items-center gap-2">
                 <input
                   type="checkbox"
+                  disabled={saving}
                   checked={d.include}
                   onChange={(e) => update(i, { include: e.target.checked })}
                   className="size-4 accent-[var(--accent)] shrink-0"
                 />
                 <Input
+                  disabled={saving}
                   value={d.name}
                   onChange={(e) => update(i, { name: e.target.value })}
                   className="flex-1"
                 />
                 <Select
+                  disabled={saving}
                   value={d.category}
                   onChange={(e) => update(i, { category: e.target.value })}
                   className="w-32 shrink-0"

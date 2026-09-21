@@ -70,7 +70,7 @@ describe("CookMode", () => {
     expect(finishBtn).toBeEnabled();
 
     await userEvent.click(finishBtn);
-    expect(cookRecipe).toHaveBeenCalledWith("r1");
+    expect(cookRecipe).toHaveBeenCalledWith(recipe, recipe.servings);
     expect(await screen.findByText(/cooked — pantry updated/i)).toBeInTheDocument();
     expect(onClose).toHaveBeenCalled();
   });

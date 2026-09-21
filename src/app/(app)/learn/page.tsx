@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Search, ChefHat, Clock, ChevronDown } from "lucide-react";
 import { listTechniques, type Technique } from "@/lib/food-db";
@@ -81,6 +82,7 @@ export default function LearnPage() {
         subtitle="Cooking techniques, step by step — the craft behind the recipes."
       />
 
+      <nav className="flex flex-wrap gap-4 mb-5 text-sm underline"><Link className="min-h-11 inline-flex items-center" href="/food-guide/">Food & nutrition guide</Link><Link className="min-h-11 inline-flex items-center" href="/prep/">Three-day prep & storage</Link></nav>
       <div className="relative mb-6 max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--text-muted)]" />
         <Input
@@ -129,9 +131,9 @@ export default function LearnPage() {
                   <Card
                     key={t.id}
                     className="cursor-pointer transition-colors hover:border-[var(--terracotta-q)]"
-                    onClick={() => setOpenId(open ? null : t.id)}
+
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <button type="button" aria-expanded={open} className="w-full text-left min-h-11 flex items-start justify-between gap-3" onClick={() => setOpenId(open ? null : t.id)}>
                       <div className="flex items-center gap-2">
                         <ChefHat className="size-4 text-[var(--accent)]" />
                         <h3 className="font-medium">{t.title}</h3>
@@ -142,7 +144,7 @@ export default function LearnPage() {
                           open && "rotate-180",
                         )}
                       />
-                    </div>
+                    </button>
                     <p className="text-sm text-[var(--text-muted)] mt-1.5">
                       {t.summary}
                     </p>

@@ -13,16 +13,25 @@ import type {
   UnitType,
   StorageZone,
 } from "./types";
+import { ingredientName } from "./ingredient-name";
+import { foodStorage } from "./food-storage";
+import { prepPortion, prepDates } from "./prep-planner";
 import { seedRecipes, seedEquipment, seedDeals } from "./seed-data";
-import { getSupabase } from "./supabase";
+import { ApiError, apiRequest, householdPath, requestDataRefresh as dispatchDataRefresh } from "./api-client";
+import { saveOfflineShopping } from "./offline-shopping";
 
 interface SyncedActionsCtx {
   householdId: string;
   userId: string;
+  householdName?: string;
 }
 
 interface AppState {
-  // Synced from Supabase
+  _identity: string | null;
+  syncStatus: "loading" | "online" | "offline" | "error";
+  syncError: string | null;
+  lastSyncedAt: string | null;
+  // Synced from the household Workers API
   pantry: PantryItem[];
   shopping: ShoppingItem[];
   mealPlan: MealPlanEntry[];
@@ -51,7 +60,7 @@ interface AppState {
   _removeSavedRecipe: (id: string) => void;
   _clearAllSynced: () => void;
 
-  // Mutators (these write through to Supabase when ctx is set)
+  // Mutations are authorized and applied by the household API.
   addPantryItem: (
     item: Omit<PantryItem, "id" | "addedOn">,
     ctx: SyncedActionsCtx,
@@ -69,8 +78,9 @@ interface AppState {
     ctx: SyncedActionsCtx,
   ) => Promise<void>;
   cookRecipe: (
-    recipeId: string,
+    recipe: string | Recipe,
     ctx: SyncedActionsCtx,
+    servings?: number,
   ) => Promise<{ ok: boolean; missing: string[] }>;
 
   addShoppingItem: (
@@ -80,9 +90,11 @@ interface AppState {
   toggleShoppingItem: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
   removeShoppingItem: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
   clearCompleted: (ctx: SyncedActionsCtx) => Promise<void>;
-  generateFromRecipe: (recipeId: string, ctx: SyncedActionsCtx) => Promise<void>;
+  generateFromRecipe: (recipe: string | Recipe, ctx: SyncedActionsCtx, servings?: number) => Promise<void>;
+  moveShoppingToPantry: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
   buildWeekList: (dates: string[], ctx: SyncedActionsCtx) => Promise<number>;
 
+  planPrep: (recipes: Recipe[], start: string, people: number, ctx: SyncedActionsCtx) => Promise<number>;
   addMealPlan: (
     entry: Omit<MealPlanEntry, "id">,
     ctx: SyncedActionsCtx,
@@ -104,7 +116,72 @@ interface AppState {
   toggleEquipment: (name: string) => void;
 }
 
-const supa = () => getSupabase();
+export const identityKey = (ctx: SyncedActionsCtx) => `${ctx.userId}:${ctx.householdId}`;
+const isCurrent = (ctx: SyncedActionsCtx) => useAppStore.getState()._identity === identityKey(ctx);
+const resource = (ctx: SyncedActionsCtx, kind: string, id?: string) => {
+  if (!isCurrent(ctx)) throw new Error("Your household changed. Please retry.");
+  return householdPath(ctx.householdId, kind, id);
+};
+const pendingOperations = new Map<string, string>();
+function requestDataRefresh() {
+  refreshOrder++;
+  dispatchDataRefresh();
+}
+
+async function operation(ctx: SyncedActionsCtx, type: string, payload: Record<string, unknown>) {
+  if (!isCurrent(ctx)) throw new Error("Your household changed. Please retry.");
+  const key = JSON.stringify([identityKey(ctx), type, payload]);
+  const operationId = pendingOperations.get(key) ?? crypto.randomUUID();
+  pendingOperations.set(key, operationId);
+  try {
+    await apiRequest(resource(ctx, "operations"), { method: "POST", body: { operationId, type, ...payload } });
+    pendingOperations.delete(key);
+    requestDataRefresh();
+    // A committed write remains successful if the follow-up read temporarily fails.
+    await refreshHouseholdData(ctx).catch(() => {
+      if (isCurrent(ctx)) useAppStore.setState({ syncStatus: "error", syncError: "Saved. Refreshing your household data failed; retry the refresh." });
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status >= 400 && error.status < 500) pendingOperations.delete(key);
+    throw error;
+  }
+}
+
+export function quantityInUnit(quantity: number, from: UnitType, to: UnitType): number | null {
+  if (from === to) return quantity;
+  const mass: Partial<Record<UnitType, number>> = { g: 1, kg: 1000 };
+  const volume: Partial<Record<UnitType, number>> = { ml: 1, l: 1000, tsp: 4.92892159375, tbsp: 14.78676478125, cup: 236.5882365 };
+  const units = mass[from] && mass[to] ? mass : volume[from] && volume[to] ? volume : null;
+  return units ? quantity * units[from]! / units[to]! : null;
+}
+
+export function availableQuantity(items: Array<{ name: string; unit: UnitType; quantity: number }>, name: string, unit: UnitType) {
+  return items.filter((item) => ingredientName(item.name) === ingredientName(name))
+    .reduce((total, item) => total + (quantityInUnit(item.quantity, item.unit, unit) ?? 0), 0);
+}
+
+function resolveRecipe(value: string | Recipe): Recipe {
+  const state = useAppStore.getState();
+  const recipe = typeof value === "string" ? [...state.savedRecipes, ...state.recipes].find((r) => r.id === value) : value;
+  if (!recipe) throw new Error("This recipe is unavailable. Open it and try again.");
+  return recipe;
+}
+
+function mergeIngredientNeeds(ingredients: Recipe["ingredients"]) {
+  const combined: Recipe["ingredients"] = [];
+  for (const ing of ingredients.filter((i) => !i.optional)) {
+    const previous = combined.find((p) => ingredientName(p.name) === ingredientName(ing.name) && quantityInUnit(ing.quantity, ing.unit, p.unit) !== null);
+    if (previous) previous.quantity += quantityInUnit(ing.quantity, ing.unit, previous.unit)!;
+    else combined.push({ ...ing });
+  }
+  return combined;
+}
+
+function scaledIngredients(recipe: Recipe, servings?: number) {
+  const scale = (servings ?? recipe.servings) / Math.max(1, recipe.servings);
+  if (!Number.isFinite(scale) || scale <= 0) throw new Error("Choose a valid number of servings.");
+  return mergeIngredientNeeds(recipe.ingredients.map((ing) => ({ ...ing, quantity: ing.quantity * scale })));
+}
 
 // DB row helpers ---------------------------------------------------
 interface PantryRow {
@@ -141,7 +218,8 @@ interface ShoppingRow {
   quantity: number;
   unit: string;
   category: string;
-  done: boolean;
+  done: boolean | number;
+  revision?: number;
   from_recipe: string | null;
   deal_price: number | null;
   deal_store: string | null;
@@ -154,7 +232,8 @@ function shoppingFromRow(row: ShoppingRow): ShoppingItem {
     quantity: Number(row.quantity),
     unit: row.unit as UnitType,
     category: row.category,
-    done: row.done,
+    done: Boolean(row.done),
+    revision: row.revision,
     fromRecipe: row.from_recipe ?? undefined,
     dealPrice: row.deal_price ?? undefined,
     dealStore: row.deal_store ?? undefined,
@@ -255,6 +334,10 @@ function savedRecipeFromRow(row: SavedRecipeRow): Recipe {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+      _identity: null,
+      syncStatus: "loading",
+      syncError: null,
+      lastSyncedAt: null,
       pantry: [],
       shopping: [],
       mealPlan: [],
@@ -310,392 +393,167 @@ export const useAppStore = create<AppState>()(
         set((s) => ({
           savedRecipes: s.savedRecipes.filter((p) => p.id !== id),
         })),
-      _clearAllSynced: () =>
+      _clearAllSynced: () => {
+        pendingOperations.clear();
+        refreshOrder++;
         set({
           pantry: [],
           shopping: [],
           mealPlan: [],
           usage: [],
           savedRecipes: [],
-        }),
+        });
+      },
 
       addPantryItem: async (item, ctx) => {
-        const { data, error } = await supa()
-          .from("pantry_items")
-          .insert({
-            household_id: ctx.householdId,
-            name: item.name,
-            category: item.category,
-            quantity: item.quantity,
-            unit: item.unit,
-            zone: item.zone,
-            expires_on: item.expiresOn ?? null,
-            notes: item.notes ?? null,
-            created_by: ctx.userId,
-          })
-          .select()
-          .single();
-        if (error || !data) throw error ?? new Error("Insert failed");
-        get()._upsertPantry(pantryFromRow(data as PantryRow));
+        const { data } = await apiRequest<{ data: PantryRow }>(resource(ctx, "pantry"), { method: "POST", body: {
+          name: item.name, category: item.category, quantity: item.quantity, unit: item.unit,
+          zone: item.zone, expires_on: item.expiresOn ?? null, notes: item.notes ?? null,
+        } });
+        if (isCurrent(ctx)) get()._upsertPantry(pantryFromRow(data));
+        requestDataRefresh();
       },
-
       updatePantryItem: async (id, patch, ctx) => {
-        const dbPatch: Record<string, unknown> = {};
-        if (patch.name !== undefined) dbPatch.name = patch.name;
-        if (patch.category !== undefined) dbPatch.category = patch.category;
-        if (patch.quantity !== undefined) dbPatch.quantity = patch.quantity;
-        if (patch.unit !== undefined) dbPatch.unit = patch.unit;
-        if (patch.zone !== undefined) dbPatch.zone = patch.zone;
-        if (patch.expiresOn !== undefined)
-          dbPatch.expires_on = patch.expiresOn ?? null;
-        if (patch.notes !== undefined) dbPatch.notes = patch.notes ?? null;
-        const { data, error } = await supa()
-          .from("pantry_items")
-          .update(dbPatch)
-          .eq("id", id)
-          .eq("household_id", ctx.householdId)
-          .select()
-          .single();
-        if (error || !data) throw error ?? new Error("Update failed");
-        get()._upsertPantry(pantryFromRow(data as PantryRow));
+        const body: Record<string, unknown> = {};
+        for (const key of ["name", "category", "quantity", "unit", "zone", "notes"] as const) if (patch[key] !== undefined) body[key] = patch[key];
+        if (patch.expiresOn !== undefined) body.expires_on = patch.expiresOn || null;
+        const { data } = await apiRequest<{ data: PantryRow }>(resource(ctx, "pantry", id), { method: "PATCH", body });
+        if (isCurrent(ctx)) get()._upsertPantry(pantryFromRow(data));
+        requestDataRefresh();
       },
-
       removePantryItem: async (id, ctx) => {
-        const { error } = await supa()
-          .from("pantry_items")
-          .delete()
-          .eq("id", id)
-          .eq("household_id", ctx.householdId);
-        if (error) throw error;
-        get()._removePantry(id);
+        await apiRequest(resource(ctx, "pantry", id), { method: "DELETE" });
+        if (isCurrent(ctx)) get()._removePantry(id);
+        requestDataRefresh();
       },
-
       consumeItem: async (id, quantity, reason, ctx) => {
-        const item = get().pantry.find((p) => p.id === id);
-        if (!item) return;
-        const newQty = Math.max(0, item.quantity - quantity);
-        if (newQty === 0) {
-          await get().removePantryItem(id, ctx);
-        } else {
-          await get().updatePantryItem(id, { quantity: newQty }, ctx);
-        }
-        const { data, error } = await supa()
-          .from("usage_events")
-          .insert({
-            household_id: ctx.householdId,
-            item_id: item.id,
-            item_name: item.name,
-            quantity,
-            unit: item.unit,
-            reason,
-            created_by: ctx.userId,
-          })
-          .select()
-          .single();
-        if (error || !data) throw error ?? new Error("Usage insert failed");
-        get()._upsertUsage(usageFromRow(data as UsageRow));
+        await operation(ctx, "consume", { itemId: id, quantity, reason });
       },
-
-      cookRecipe: async (recipeId, ctx) => {
-        const recipe = get().recipes.find((r) => r.id === recipeId);
-        if (!recipe) return { ok: false, missing: [] };
-        const pantry = get().pantry;
-        const required = recipe.ingredients.filter((i) => !i.optional);
-        const missing = required.filter((ing) => {
-          const owned = pantry.find(
-            (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
-          );
-          return !owned || owned.quantity < ing.quantity;
-        });
-        if (missing.length > 0)
-          return { ok: false, missing: missing.map((m) => m.name) };
-
-        for (const ing of required) {
-          const item = pantry.find(
-            (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
-          );
-          if (!item) continue;
-          await get().consumeItem(item.id, ing.quantity, "used", ctx);
+      cookRecipe: async (value, ctx, servings) => {
+        const recipe = resolveRecipe(value);
+        const ingredients = scaledIngredients(recipe, servings);
+        if (!ingredients.length) throw new Error("This recipe has no ingredient quantities to deduct.");
+        const missing = ingredients.filter((ing) => availableQuantity(get().pantry, ing.name, ing.unit) + 1e-8 < ing.quantity).map((ing) => ing.name);
+        if (missing.length) return { ok: false, missing };
+        try { await operation(ctx, "cook", { recipeId: recipe.id, ingredients }); }
+        catch (error) {
+          const details = error instanceof ApiError ? error.details as { missing?: string[] } | undefined : undefined;
+          if (details?.missing) return { ok: false, missing: details.missing };
+          throw error;
         }
         return { ok: true, missing: [] };
       },
-
       addShoppingItem: async (item, ctx) => {
-        const { data, error } = await supa()
-          .from("shopping_items")
-          .insert({
-            household_id: ctx.householdId,
-            name: item.name,
-            quantity: item.quantity,
-            unit: item.unit,
-            category: item.category,
-            from_recipe: item.fromRecipe ?? null,
-            deal_price: item.dealPrice ?? null,
-            deal_store: item.dealStore ?? null,
-            created_by: ctx.userId,
-          })
-          .select()
-          .single();
-        if (error || !data) throw error ?? new Error("Shopping insert failed");
-        get()._upsertShopping(shoppingFromRow(data as ShoppingRow));
+        const { data } = await apiRequest<{ data: ShoppingRow }>(resource(ctx, "shopping"), { method: "POST", body: {
+          name: item.name, quantity: item.quantity, unit: item.unit, category: item.category,
+          from_recipe: item.fromRecipe ?? null, deal_price: item.dealPrice ?? null, deal_store: item.dealStore ?? null,
+        } });
+        if (isCurrent(ctx)) get()._upsertShopping(shoppingFromRow(data));
+        requestDataRefresh();
       },
-
       toggleShoppingItem: async (id, ctx) => {
         const item = get().shopping.find((s) => s.id === id);
         if (!item) return;
-        const { data, error } = await supa()
-          .from("shopping_items")
-          .update({ done: !item.done })
-          .eq("id", id)
-          .eq("household_id", ctx.householdId)
-          .select()
-          .single();
-        if (error || !data) throw error ?? new Error("Toggle failed");
-        get()._upsertShopping(shoppingFromRow(data as ShoppingRow));
+        await operation(ctx, "set-checked", { itemId: id, done: !item.done, expectedRevision: item.revision });
       },
-
       removeShoppingItem: async (id, ctx) => {
-        const { error } = await supa()
-          .from("shopping_items")
-          .delete()
-          .eq("id", id)
-          .eq("household_id", ctx.householdId);
-        if (error) throw error;
-        get()._removeShopping(id);
+        await apiRequest(resource(ctx, "shopping", id), { method: "DELETE" });
+        if (isCurrent(ctx)) get()._removeShopping(id);
+        requestDataRefresh();
       },
-
+      moveShoppingToPantry: async (id, ctx) => { const item = get().shopping.find(s => s.id === id); await operation(ctx, "move-shopping", { itemId: id, zone: item ? foodStorage(item.name).zone : "pantry" }); },
       clearCompleted: async (ctx) => {
-        const done = get().shopping.filter((s) => s.done);
-        if (done.length === 0) return;
-        const { error } = await supa()
-          .from("shopping_items")
-          .delete()
-          .in(
-            "id",
-            done.map((d) => d.id),
-          )
-          .eq("household_id", ctx.householdId);
-        if (error) throw error;
-        done.forEach((d) => get()._removeShopping(d.id));
+        if (get().shopping.some((s) => s.done)) await operation(ctx, "clear-completed", {});
       },
-
-      generateFromRecipe: async (recipeId, ctx) => {
-        const recipe = get().recipes.find((r) => r.id === recipeId);
-        if (!recipe) return;
-        const pantry = get().pantry;
-        const missing = recipe.ingredients.filter((ing) => {
-          if (ing.optional) return false;
-          const have = pantry.find(
-            (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
-          );
-          return !have || have.quantity < ing.quantity;
+      generateFromRecipe: async (value, ctx, servings) => {
+        const recipe = resolveRecipe(value);
+        const items = scaledIngredients(recipe, servings).flatMap((ing) => {
+          const deficit = ing.quantity - availableQuantity(get().pantry, ing.name, ing.unit) - availableQuantity(get().shopping.filter((s) => !s.done), ing.name, ing.unit);
+          return deficit > 1e-8 ? [{ name: ing.name, quantity: Math.max(0.001, Math.round(deficit * 1000) / 1000), unit: ing.unit, category: foodStorage(ing.name).category, from_recipe: recipe.name }] : [];
         });
-        for (const m of missing) {
-          await get().addShoppingItem(
-            {
-              name: m.name,
-              quantity: m.quantity,
-              unit: m.unit,
-              category: "From recipe",
-              fromRecipe: recipe.name,
-            },
-            ctx,
-          );
-        }
+        if (items.length) await operation(ctx, "add-shopping-batch", { items });
       },
-
-      // Build a shopping list for a set of dates: sum every planned recipe's
-      // non-optional ingredients, subtract what's already in the pantry (by
-      // name + unit) and what's already on the list, and add the remainder.
-      // Returns how many items were added.
       buildWeekList: async (dates, ctx) => {
         const { mealPlan, recipes, savedRecipes, pantry, shopping } = get();
         const all = [...savedRecipes, ...recipes];
-        const planned = mealPlan.filter((m) => dates.includes(m.date));
-
-        const need = new Map<
-          string,
-          { name: string; quantity: number; unit: UnitType; recipe: string }
-        >();
-        for (const entry of planned) {
-          const r = all.find((x) => x.id === entry.recipeId);
-          if (!r) continue;
-          for (const ing of r.ingredients) {
-            if (ing.optional) continue;
-            const key = `${ing.name.toLowerCase()}|${ing.unit}`;
-            const prev = need.get(key);
-            if (prev) prev.quantity += ing.quantity;
-            else
-              need.set(key, {
-                name: ing.name,
-                quantity: ing.quantity,
-                unit: ing.unit,
-                recipe: r.name,
-              });
-          }
+        const ingredients: Recipe["ingredients"] = [];
+        for (const entry of mealPlan.filter((m) => dates.includes(m.date))) {
+          const recipe = all.find((r) => r.id === entry.recipeId);
+          if (!recipe) throw new Error("A planned recipe is unavailable. Save it again before building the list.");
+          ingredients.push(...scaledIngredients(recipe));
         }
-
-        const onList = new Set(shopping.map((s) => s.name.toLowerCase()));
-        let added = 0;
-        for (const item of need.values()) {
-          const owned = pantry.find(
-            (p) =>
-              p.name.toLowerCase() === item.name.toLowerCase() &&
-              p.unit === item.unit,
-          );
-          const deficit = owned ? item.quantity - owned.quantity : item.quantity;
-          if (deficit <= 0) continue; // already have enough
-          if (onList.has(item.name.toLowerCase())) continue; // avoid dupes
-          await get().addShoppingItem(
-            {
-              name: item.name,
-              quantity: Math.ceil(deficit),
-              unit: item.unit,
-              category: "This week",
-              fromRecipe: item.recipe,
-            },
-            ctx,
-          );
-          onList.add(item.name.toLowerCase());
-          added++;
-        }
-        return added;
+        const items = mergeIngredientNeeds(ingredients).flatMap((item) => {
+          const deficit = item.quantity - availableQuantity(pantry, item.name, item.unit) - availableQuantity(shopping.filter((s) => !s.done), item.name, item.unit);
+          return deficit > 1e-8 ? [{ name: item.name, unit: item.unit, quantity: Math.max(0.001, Math.round(deficit * 1000) / 1000), category: foodStorage(item.name).category, from_recipe: "Weekly meal plan" }] : [];
+        });
+        if (items.length) await operation(ctx, "add-shopping-batch", { items });
+        return items.length;
       },
-
-      addMealPlan: async (entry, ctx) => {
-        const recipe = get().recipes.find((r) => r.id === entry.recipeId);
-        const { data, error } = await supa()
-          .from("meal_plan")
-          .insert({
-            household_id: ctx.householdId,
-            date: entry.date,
-            meal: entry.meal,
-            recipe_id: entry.recipeId,
-            recipe_name: recipe?.name ?? null,
-            created_by: ctx.userId,
-          })
-          .select()
-          .single();
-        if (error || !data) throw error ?? new Error("Meal plan insert failed");
-        get()._upsertMealPlan(mealPlanFromRow(data as MealPlanRow));
-      },
-
-      removeMealPlan: async (id, ctx) => {
-        const { error } = await supa()
-          .from("meal_plan")
-          .delete()
-          .eq("id", id)
-          .eq("household_id", ctx.householdId);
-        if (error) throw error;
-        get()._removeMealPlan(id);
-      },
-
-      moveMealPlan: async (id, target, ctx) => {
-        const existing = get().mealPlan.find((m) => m.id === id);
-        if (!existing) return;
-        // No-op if dropped on its own slot.
-        if (existing.date === target.date && existing.meal === target.meal) {
-          return;
+      planPrep: async (recipes, start, people, ctx) => {
+        if (recipes.length !== 2) throw new Error("Choose a lunch and dinner recipe.");
+        const dates = prepDates(start);
+        const entries: Array<{date: string; meal: string; recipe_id: string; recipe_name: string}> = [];
+        for (const [index, recipe] of recipes.entries()) {
+          const meal = index === 0 ? 'lunch' : 'dinner';
+          const emptyDates = dates.filter(date => !get().mealPlan.some(entry => entry.date === date && entry.meal === meal));
+          if (!emptyDates.length) continue;
+          const portion = prepPortion(recipe, people);
+          const existing = get().savedRecipes.find(item => item.externalId === portion.externalId);
+          const recipeId = existing?.id ?? await get().saveRecipe(portion, ctx);
+          for (const date of emptyDates) entries.push({date, meal, recipe_id: recipeId, recipe_name: portion.name});
         }
-        // Optimistic move; reconcile from the DB row (or revert on failure).
-        get()._upsertMealPlan({ ...existing, ...target });
-        const { data, error } = await supa()
-          .from("meal_plan")
-          .update({ date: target.date, meal: target.meal })
-          .eq("id", id)
-          .eq("household_id", ctx.householdId)
-          .select()
-          .single();
-        if (error || !data) {
-          get()._upsertMealPlan(existing); // revert
-          throw error ?? new Error("Meal plan move failed");
-        }
-        get()._upsertMealPlan(mealPlanFromRow(data as MealPlanRow));
-      },
-
-      // Ask Claude (server-side, capped) to assign known recipes across the given
-      // dates/meals, then persist the returned entries. Returns how many landed.
-      generateMealPlan: async (opts, ctx) => {
-        const { recipes, savedRecipes } = get();
-        const candidates = [...savedRecipes, ...recipes].map((r) => ({
-          id: r.id,
-          name: r.name,
-          cuisine: r.cuisine,
-          tags: r.tags,
-          minutes: r.minutes,
-        }));
-        const { data, error } = await supa().functions.invoke(
-          "generate-meal-plan",
-          {
-            body: {
-              householdId: ctx.householdId,
-              dates: opts.dates,
-              meals: opts.meals,
-              preferences: opts.preferences,
-              candidates,
-            },
-          },
-        );
-        if (error) throw new Error(error.message || "Generation failed.");
-        if (data?.error) throw new Error(data.error);
-        const entries = (data?.entries ?? []) as Array<{
-          date: string;
-          meal: MealPlanEntry["meal"];
-          recipeId: string;
-        }>;
-        for (const e of entries) {
-          await get().addMealPlan(
-            { date: e.date, meal: e.meal, recipeId: e.recipeId },
-            ctx,
-          );
-        }
+        if (entries.length) await operation(ctx, 'add-meal-plan-batch', { entries });
         return entries.length;
       },
-
+      addMealPlan: async (entry, ctx) => {
+        const recipe = [...get().savedRecipes, ...get().recipes].find((r) => r.id === entry.recipeId);
+        const { data } = await apiRequest<{ data: MealPlanRow }>(resource(ctx, "meal-plan"), { method: "POST", body: { date: entry.date, meal: entry.meal, recipe_id: entry.recipeId, recipe_name: recipe?.name ?? null } });
+        if (isCurrent(ctx)) get()._upsertMealPlan(mealPlanFromRow(data));
+        requestDataRefresh();
+      },
+      removeMealPlan: async (id, ctx) => {
+        await apiRequest(resource(ctx, "meal-plan", id), { method: "DELETE" });
+        if (isCurrent(ctx)) get()._removeMealPlan(id);
+        requestDataRefresh();
+      },
+      moveMealPlan: async (id, target, ctx) => {
+        const existing = get().mealPlan.find((m) => m.id === id);
+        if (!existing || (existing.date === target.date && existing.meal === target.meal)) return;
+        const { data } = await apiRequest<{ data: MealPlanRow }>(resource(ctx, "meal-plan", id), { method: "PATCH", body: target });
+        if (isCurrent(ctx)) get()._upsertMealPlan(mealPlanFromRow(data));
+        requestDataRefresh();
+      },
+      generateMealPlan: async (opts, ctx) => {
+        const recipes = [...get().savedRecipes, ...get().recipes];
+        const candidates = recipes.map(({ id, name, cuisine, tags, minutes }) => ({ id, name, cuisine, tags, minutes }));
+        const data = await apiRequest<{ entries: Array<{ date: string; meal: MealPlanEntry["meal"]; recipeId: string }> }>("/api/meal-plan/generate", {
+          method: "POST", body: { householdId: ctx.householdId, ...opts, candidates }, timeoutMs: 45_000,
+        });
+        const entries = data.entries.map((entry) => {
+          const recipe = recipes.find((r) => r.id === entry.recipeId);
+          if (!recipe || !opts.dates.includes(entry.date) || !opts.meals.includes(entry.meal)) throw new Error("The generated plan included an invalid recipe or meal slot. Please retry.");
+          return { date: entry.date, meal: entry.meal, recipe_id: entry.recipeId, recipe_name: recipe.name };
+        });
+        if (entries.length) await operation(ctx, "add-meal-plan-batch", { entries });
+        return entries.length;
+      },
       saveRecipe: async (recipe, ctx) => {
-        const { data, error } = await supa()
-          .from("saved_recipes")
-          .insert({
-            household_id: ctx.householdId,
-            name: recipe.name,
-            description: recipe.description,
-            cuisine: recipe.cuisine,
-            minutes: recipe.minutes,
-            difficulty: recipe.difficulty,
-            servings: recipe.servings,
-            equipment: recipe.equipment,
-            ingredients: recipe.ingredients,
-            steps: recipe.steps,
-            tags: recipe.tags,
-            external_id: recipe.externalId ?? null,
-            image_url: recipe.imageUrl ?? null,
-            area: recipe.area ?? null,
-            source: recipe.source ?? null,
-            video: recipe.video ?? null,
-            calories: recipe.calories ?? null,
-            protein_g: recipe.proteinG ?? null,
-            carbs_g: recipe.carbsG ?? null,
-            fat_g: recipe.fatG ?? null,
-            created_by: ctx.userId,
-          })
-          .select()
-          .single();
-        if (error || !data) throw error ?? new Error("Save failed");
-        const saved = savedRecipeFromRow(data as SavedRecipeRow);
-        get()._upsertSavedRecipe(saved);
+        const { data } = await apiRequest<{ data: SavedRecipeRow }>(resource(ctx, "saved-recipes"), { method: "POST", body: {
+          name: recipe.name, description: recipe.description, cuisine: recipe.cuisine, minutes: recipe.minutes,
+          difficulty: recipe.difficulty, servings: recipe.servings, equipment: recipe.equipment, ingredients: recipe.ingredients,
+          steps: recipe.steps, tags: recipe.tags, external_id: recipe.externalId ?? null, image_url: recipe.imageUrl ?? null,
+          area: recipe.area ?? null, source: recipe.source ?? null, video: recipe.video ?? null, calories: recipe.calories ?? null,
+          protein_g: recipe.proteinG ?? null, carbs_g: recipe.carbsG ?? null, fat_g: recipe.fatG ?? null,
+        } });
+        const saved = savedRecipeFromRow(data);
+        if (isCurrent(ctx)) get()._upsertSavedRecipe(saved);
+        requestDataRefresh();
         return saved.id;
       },
-
       unsaveRecipe: async (savedId, ctx) => {
-        const { error } = await supa()
-          .from("saved_recipes")
-          .delete()
-          .eq("id", savedId)
-          .eq("household_id", ctx.householdId);
-        if (error) throw error;
-        // Stored ids are prefixed (savedRecipeFromRow → `saved-<row.id>`), so
-        // the optimistic removal must match that, not the raw row id.
-        get()._removeSavedRecipe(`saved-${savedId}`);
+        await apiRequest(resource(ctx, "saved-recipes", savedId), { method: "DELETE" });
+        if (isCurrent(ctx)) get()._removeSavedRecipe(`saved-${savedId}`);
+        requestDataRefresh();
       },
 
       toggleEquipment: (name) =>
@@ -714,7 +572,7 @@ export const useAppStore = create<AppState>()(
     {
       name: "pantry-pal-prefs",
       storage: createJSONStorage(() => localStorage),
-      // Only persist local-only user prefs; everything else lives in Supabase
+      // Only persist local-only user prefs; household data remains authoritative in D1
       partialize: (state) => ({ equipment: state.equipment }),
     },
   ),
@@ -733,10 +591,7 @@ export function matchRecipeAgainstPantry(
 } {
   const required = recipe.ingredients.filter((i) => !i.optional);
   const have = required.filter((ing) => {
-    const match = pantry.find(
-      (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
-    );
-    return match && match.quantity >= ing.quantity;
+    return availableQuantity(pantry, ing.name, ing.unit) >= ing.quantity;
   }).length;
   const equipmentOk = recipe.equipment.every((req) =>
     equipment.some((e) => e.name === req),
@@ -763,3 +618,29 @@ export {
   type UsageRow,
   type SavedRecipeRow,
 };
+
+export interface HouseholdSnapshot {
+  pantry_items: PantryRow[];
+  shopping_items: ShoppingRow[];
+  meal_plan: MealPlanRow[];
+  usage_events: UsageRow[];
+  saved_recipes: SavedRecipeRow[];
+  sequence: number;
+  epoch: string;
+}
+
+let refreshOrder = 0;
+export async function refreshHouseholdData(ctx: SyncedActionsCtx, signal?: AbortSignal) {
+  const order = ++refreshOrder;
+  const snapshot = await apiRequest<HouseholdSnapshot>(resource(ctx, "snapshot"), { signal });
+  if (!isCurrent(ctx) || signal?.aborted || order !== refreshOrder) return;
+  if (![snapshot.pantry_items, snapshot.shopping_items, snapshot.meal_plan, snapshot.usage_events, snapshot.saved_recipes].every(Array.isArray)) throw new Error("Invalid household response. Please retry.");
+  useAppStore.setState({
+    pantry: snapshot.pantry_items.map(pantryFromRow), shopping: snapshot.shopping_items.map(shoppingFromRow),
+    mealPlan: snapshot.meal_plan.map(mealPlanFromRow), usage: snapshot.usage_events.map(usageFromRow),
+    savedRecipes: snapshot.saved_recipes.map(savedRecipeFromRow), syncStatus: "online", syncError: null,
+    lastSyncedAt: new Date().toISOString(),
+  });
+  const state = useAppStore.getState();
+  void saveOfflineShopping({ schemaVersion: 1, userId: ctx.userId, householdId: ctx.householdId, householdName: ctx.householdName ?? "Your household", fetchedAt: state.lastSyncedAt!, items: state.shopping }).catch(() => {});
+}

@@ -1,5 +1,10 @@
 # Packaging Pantry Pal
 
+> **Reactivation status:** native build/device verification is pending. Follow
+> [P4 — Native shells](docs/plans/2026-09-20-plan4-native-shells.md) for the
+> Cloudflare API/auth migration and reproducible packaging work. The commands
+> below document existing scaffolding, not completed store releases.
+
 Pantry Pal is one codebase — a Next.js **static export** (`out/`) — shipped to
 every platform. The web build is the single source of truth; native shells wrap
 it.
@@ -24,8 +29,11 @@ npm run build       # -> out/  (static export)
 npx serve out       # or any static host; we deploy to Cloudflare Pages
 ```
 
-Installable on a phone via the browser's **Add to Home Screen**. Offline shell +
-icons + manifest already ship in `public/`.
+Home-screen installation behavior depends on the browser and OS. Icons and a
+manifest ship in `public/`, but the current service worker disables caching.
+[P1](docs/plans/2026-09-20-plan1-pwa-hardening.md) restores a tested offline
+shell; [P5](docs/plans/2026-09-20-plan5-offline-resilience.md) separately adds
+offline household snapshots. Neither capability is complete yet.
 
 ## iOS (Capacitor)
 
@@ -97,11 +105,10 @@ via the `cap:*` scripts, so you rarely call it directly.
 
 ## Notes & caveats
 
-- **Service worker:** the PWA service worker is network-first for navigations. In
-  a Capacitor WebView this is harmless but redundant (assets are local); a future
-  build flag can skip SW registration on native.
-- **Supabase:** the app talks to Supabase over the network at runtime, so the
-  native shells need connectivity for auth/sync. `NEXT_PUBLIC_*` env values are
-  baked into the static build.
+- **Service worker:** current code unregisters workers and clears caches. P1
+  replaces that behavior; P4 specifies the native runtime's registration rules.
+- **Backend:** existing code uses Supabase; P0 migrates it to Workers/D1. Native
+  shells must consume the new API/auth contract before release. Build-time
+  public configuration is visible in every package; never bundle service secrets.
 - **Deep links / auth redirect:** email-confirmation redirect URLs must include
   the native scheme when shipping to stores (configured in Supabase Auth).

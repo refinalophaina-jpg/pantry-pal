@@ -6,6 +6,9 @@ import {
   InputHTMLAttributes,
   SelectHTMLAttributes,
   forwardRef,
+  useEffect,
+  useId,
+  useRef,
 } from "react";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +45,7 @@ export const Button = forwardRef<
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer",
+        "min-h-11 inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer",
         size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
         variant === "primary" &&
           "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]",
@@ -67,7 +70,7 @@ export const Input = forwardRef<
     <input
       ref={ref}
       className={cn(
-        "w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]",
+        "w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] min-h-11 px-3 py-2 text-base outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]",
         className,
       )}
       {...props}
@@ -83,7 +86,7 @@ export const Select = forwardRef<
     <select
       ref={ref}
       className={cn(
-        "w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]",
+        "w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] min-h-11 px-3 py-2 text-base outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]",
         className,
       )}
       {...props}
@@ -132,20 +135,54 @@ export function Modal({
   title: string;
   children: React.ReactNode;
 }) {
+  const titleId = useId();
+  const ref = useRef<HTMLDialogElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const dialog = ref.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+    const first = dialog.querySelector<HTMLElement>("input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),a[href]");
+    (first ?? dialog).focus();
+    return () => {
+      if (typeof dialog.close === "function" && dialog.open) dialog.close();
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [open]);
   if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
-      onClick={onClose}
+    <dialog
+      ref={ref}
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 m-0 h-dvh max-h-none w-screen max-w-none bg-black/40 p-4 text-[var(--text)] open:flex open:items-center open:justify-center"
+      onCancel={(event) => { event.preventDefault(); closeRef.current(); }}
+      onClick={(event) => { if (event.target === event.currentTarget) closeRef.current(); }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") { event.preventDefault(); closeRef.current(); return; }
+        if (event.key !== "Tab") return;
+        const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]'));
+        if (!focusable.length) { event.preventDefault(); return; }
+        const first = focusable[0]; const last = focusable[focusable.length - 1];
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === event.currentTarget)) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }}
     >
-      <div
-        className="w-full max-w-md rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-lg font-semibold mb-4">{title}</h3>
+      <div className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <h2 id={titleId} className="text-lg font-semibold pt-2">{title}</h2>
+          <button type="button" aria-label={`Close ${title}`} className="size-11 shrink-0 rounded-lg text-2xl hover:bg-[var(--bg)]" onClick={() => closeRef.current()}>×</button>
+        </div>
         {children}
       </div>
-    </div>
+    </dialog>
   );
 }
 

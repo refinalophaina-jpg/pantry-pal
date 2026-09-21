@@ -77,6 +77,7 @@ export interface ShoppingItem {
   unit: UnitType;
   category: string;
   done: boolean;
+  revision?: number;
   fromRecipe?: string;
   dealPrice?: number;
   dealStore?: string;

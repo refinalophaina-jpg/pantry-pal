@@ -1,30 +1,40 @@
-// Self-destructing service worker.
-//
-// An earlier caching service worker could pin stale builds (cached HTML pointing
-// at hashed chunks that no longer exist after a redeploy → blank page). During
-// active development we don't want ANY service worker. Browsers re-check this
-// script on navigation, so shipping this version makes previously-stuck devices
-// heal automatically: it unregisters itself, clears all caches, and reloads.
-self.addEventListener("install", () => self.skipWaiting());
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    (async () => {
-      try {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      } catch {
-        /* ignore */
-      }
-      await self.registration.unregister();
-      const clients = await self.clients.matchAll({ type: "window" });
-      clients.forEach((c) => {
-        // Reload each open tab so it fetches a fresh, un-intercepted build.
-        if ("navigate" in c) c.navigate(c.url);
-      });
-    })(),
-  );
+/* Build replaces these constants with an immutable static asset manifest. */
+const VERSION = "__BUILD_VERSION__";
+const CACHE = `pantry-pal-static-${VERSION}`;
+const ASSETS = /*__PRECACHE__*/ ["/offline/"];
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    // A failed installation leaves the previous worker/cache intact.
+    await cache.addAll(ASSETS.map(url => new Request(url, { credentials: 'omit', redirect: 'error', cache: 'reload' })));
+  })());
 });
-
-// Pass every request straight through to the network — never serve from cache.
-self.addEventListener("fetch", () => {});
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    for (const key of await caches.keys()) {
+      if (key.startsWith('pantry-pal-static-') && key !== CACHE) await caches.delete(key);
+    }
+    await self.clients.claim();
+  })());
+});
+self.addEventListener('message', event => {
+  if (event.data?.type === 'APPLY_UPDATE') self.skipWaiting();
+});
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  const url = new URL(request.url);
+  // Never intercept authentication, household data, uploads or third parties.
+  if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      try { return await fetch(request); }
+      catch {
+        const cache = await caches.open(CACHE);
+        const fallback = url.pathname.replace(/\/$/, '') === '/offline-shopping' ? '/offline-shopping/' : '/offline/';
+        return await cache.match(fallback) ?? new Response('You’re offline. Reconnect to open Pantry Pal.', { status: 503, headers: { 'Content-Type': 'text/plain' } });
+      }
+    })());
+  } else if (ASSETS.includes(url.pathname)) {
+    event.respondWith((async () => (await (await caches.open(CACHE)).match(url.pathname)) ?? fetch(request))());
+  }
+});

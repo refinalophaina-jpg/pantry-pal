@@ -5,9 +5,48 @@ All notable changes to Pantry Pal are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — 2026-09-21 content update
 
-_Changes land here before the next tagged release._
+### Added
+- Three-day prep sessions for Thai/Indian and Nigerian/Vietnamese vegetarian-friendly meals, portion scaling, pantry-first shopping, and fresh/cupboard groups.
+- Six detailed prep recipes, nutrition and batch storage guidance, and a searchable food guide with 32 traceable USDA records.
+- Meal-plan recipe dialogs, favorites, shopping and cooking actions, plus subject illustrations and resilient lazy-loaded provider photos.
+
+### Fixed
+- Nutrition estimates preserve preparation state, require known weight conversions, and disclose incomplete subtotals.
+- Recipe pantry badges aggregate compatible units; raw-produce aliases match stock consistently in the client and Worker.
+- USDA imports retain exact returned food descriptions rather than assigning broad search-query names.
+- Mobile navigation identifies destinations by route instead of fragile array positions.
+
+### Performance
+- Bounded public recipe cache, four concurrent nutrition lookups, and incremental Explore/food-guide grids.
+
+### Operations (independent review, 2026-09-21)
+- Deploy workflow: push to `main` ships staging after the full gates; production is a confirmed manual dispatch. Every deploy applies tracked D1 migrations, then verifies that the live `/api/health`, `/sw.js` identity and `/version.json` match the built artifact.
+- `/version.json` release identity generated on every build (never precached, served `no-store`).
+- Browser journeys run in CI against a local Worker + D1 (non-blocking while bedding in).
+- Maskable 512 px icon for Android adaptive launchers; the build validates every manifest icon.
+- Service worker registration skips non-http origins (native shells); Actions on v5, `engines.node >= 24`, Dependabot.
+
+## [0.10.0] — 2026-09-21
+
+### Added
+- Cloudflare Workers/D1 backend with verified email accounts, household isolation, invitation codes, and secure guest recovery.
+- Atomic, retry-safe pantry consumption, recipe cooking, shopping transfer, and shared-list updates.
+- Read-only shopping snapshots for up to 24 hours offline; explicit clearing and sign-out purge.
+- Versioned PWA shell, update prompt, security headers, accessible dialogs and phone/tablet navigation.
+- Tracked D1 migrations, starter catalog, and bounded catalog refresh with lease protection.
+
+### Changed
+- Removed Supabase runtime, browser keys and retired automation. Updated dependencies to a clean npm audit.
+- Web and native metadata aligned to 0.10.0. Native distribution remains a separate track.
+
+### Documentation
+- Complete the interrupted reactivation planning package: masterplan, seven
+  executable phases, baseline evidence and Cloudflare platform decision.
+- Set Workers/D1 as the target backend, with staged data/auth migration,
+  device/PWA/offline verification and a controlled domain cutover.
+- Record the actual implementation, verification evidence and remaining device limits.
 
 ## [0.9.0] — 2026-06-11
 

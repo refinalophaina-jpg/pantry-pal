@@ -2,173 +2,148 @@
   <img src="public/illustrations/logo.svg" width="72" alt="Pantry Pal" />
   <h1>Pantry Pal</h1>
   <p><strong>Cook more · waste less.</strong></p>
-  <p>A shared household kitchen app — smart pantry inventory, recipes from what you already have, live recipe scaling, meal planning, a deal-aware shopping list, cooking guides, and waste analytics.</p>
-  <p>🌐 <a href="https://pantry-pal.pages.dev">pantry-pal.pages.dev</a> · one codebase → <strong>web · iOS · Android · desktop</strong></p>
+  <p>A shared household pantry, shopping list, recipe collection, and meal planner.</p>
 </div>
 
----
+## Current implementation
 
-## What it does
+Pantry Pal now uses **Cloudflare Workers Static Assets, a same-origin Workers API,
+D1, and Better Auth**. The frontend remains a Next.js static export. There is no
+Supabase dependency in the application runtime, and the browser needs no public
+backend keys.
 
-Pantry Pal is built for a household (you + partner/roommates) sharing one kitchen.
-Everyone in a household sees the same pantry, shopping list, and meal plan **in
-real time**.
+The owner confirmed that there is **no existing household or account data to
+preserve**. This installation initializes fresh D1 databases with reference data;
+it does not import old accounts or passwords. The historical `supabase/` files
+remain migration context, not deployment instructions.
 
-| Area | What you get |
-|------|--------------|
-| **Dashboard** | Today's planned calories, expiring-soon alerts, "cook with what you have", local deals, quick actions. |
-| **Pantry** | Add by hand, **scan a barcode**, or **snap a photo** (AI lists the items). Track quantity, unit, storage zone, and expiry. **Inline +/- quantity steppers**, **drag items between zones**, and **sort** by expiry / name / recency. Use & waste tracking feeds analytics. |
-| **Recipes** | A curated multi-cuisine collection ranked by how much you already own. **Live serving scaling** rescales ingredients in real time. Save favourites, add missing to the list, and a step-by-step **Cook mode** that deducts from your pantry. |
-| **Explore** | Search thousands of recipes (Spoonacular) plus **Our Kitchen** (the built-in catalog) — full ingredients, steps, images. |
-| **Learn** | A library of **cooking guides** (techniques) — searchable, step-by-step, by difficulty and time. |
-| **Meal plan** | A weekly grid with **drag-and-drop** to rearrange meals, plus an AI weekly-plan generator. |
-| **Shopping** | Quick-add, build-the-week's-list from your plan, deal matching, and aisle-ordered shopping per store. |
-| **Analytics** | Meals cooked, waste rate, estimated savings, and a 14-day cooking-activity chart. |
-| **Anywhere** | A **⌘K command palette** — jump to any page, toggle theme, or search the food database and quick-add to your pantry. Warm light/dark themes. |
+Live application: **https://pantry.ainadara.com**. Release 0.10.0 was deployed and
+its guest recovery journey verified on 2026-09-21 UTC. See the
+[release evidence and remaining device checks](docs/verification/2026-09-21-cloudflare-migration.md)
+and [deployment procedure](DEPLOY.md).
 
----
+The [masterplan](docs/MASTERPLAN.md) and [phase plans](docs/plans/README.md)
+retain the broader reactivation roadmap. Native distribution and extended
+offline workflows still have their own acceptance gates.
 
-## The food consortium
+## Features
 
-A queryable reference layer lives in Postgres, shared across all households
-(public-read), with typo-tolerant full-text **and** trigram search:
+| Area | Current behavior |
+|---|---|
+| Accounts | Email/password sign-in, required email verification, verification resend, password recovery, and revocable D1-backed sessions. |
+| Guests | Start without email, keep a browser session, and optionally create a recovery code to restore the same household on another browser. |
+| Households | Create a household or redeem an invite. The API checks membership for household reads and writes. |
+| Pantry | Quantity, storage zone, expiry, barcode lookup, and food-photo suggestions for manual review. Photo recognition uses Workers AI. |
+| Recipes | Built-in recipes, World recipes from TheMealDB, serving scaling, favourites, cooking steps, and shopping-list actions. |
+| Meal planning | Weekly planning and a Workers AI suggestion endpoint constrained to the supplied recipe IDs and meal slots. |
+| Shopping | Shared list, recipe-based additions, store/aisle ordering, and a separate read-only saved list. |
+| Reference data | D1 ingredients, foods, cooking techniques, and recipe catalog; importer tools populate the shared reference tables. |
+| Updates | Devices refresh while visible, after writes, and on resume, with retry/backoff after failures. This is polling, not a realtime subscription. |
 
-- **`ingredients`** — canonical foods with aliases, conversions, and per-100 g nutrition (USDA, public domain)
-- **`foods`** — branded/barcode products (Open Food Facts)
-- **`techniques`** — step-by-step cooking guides
-- **`recipe_catalog`** — a shared recipe corpus
+Explore opens with the D1 catalog and bundled recipes; no external recipe secret
+is needed. World recipes, cuisine browsing, and name searches can add TheMealDB
+results, with local recipes retained on provider failure. The existing
+Spoonacular endpoint is optional and unused by the default UI; configuring
+`SPOONACULAR_API_KEY` alone does not change Explore's sources. AI and external
+catalog availability depend on the configured account and upstream services.
 
-It powers nutrition estimation, pantry autocomplete, barcode lookup, the Learn
-page, and Explore. Seeded out of the box; expand it with the importers in
-[`scripts/`](./scripts/README.md) (USDA FoodData Central + Open Food Facts).
+## Run locally
 
----
-
-## Run it
-
-### Web (dev)
-
-```bash
-npm install
-cp .env.example .env.local        # fill in your Supabase URL + anon key
-npm run dev                       # http://localhost:3000
-```
-
-### Install as a PWA
-
-Open the site in Safari (iOS) or Chrome (Android) → **Share → Add to Home
-Screen**. Launches full-screen with its own icon.
-
-### iOS, Android & desktop
-
-Pantry Pal is one static-export codebase wrapped per platform. Full prerequisites
-and commands are in **[`PACKAGING.md`](./PACKAGING.md)**; the short version:
+Use Node.js 24 and the checked-in lockfile.
 
 ```bash
-# iOS (needs full Xcode)
-npx cap add ios   && npm run cap:ios          # build + open Xcode
-
-# Android (needs JDK 21 + Android SDK)
-npx cap add android && npm run cap:android     # build + open Android Studio
-
-# Desktop (needs the Rust toolchain)
-npm run tauri:dev                              # dev window
-npm run tauri:build                            # -> src-tauri/target/release/bundle/
+npm ci
+cp .dev.vars.example .dev.vars
+# Replace BETTER_AUTH_SECRET in .dev.vars with a random secret of at least 32 characters.
+npm run cf:migrate:local
+npm run build
+npm run cf:dev
 ```
 
-### Environment variables
+Open **http://localhost:8787**. Wrangler serves both the static export and API.
+`npm run dev` starts the Next.js UI development server on port 3000; it does not
+provide the Workers API. Rebuild the export to test frontend changes through
+Wrangler.
 
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase publishable/anon key (safe in the browser; protected by RLS). |
+Authentication tests use mock email delivery. Local password enrollment is disabled while
+`AUTH_EMAIL_ENABLED` is false; a registered sending domain and a working `EMAIL`
+binding are required before enabling it. Verification is never bypassed because
+email delivery is unavailable. See [DEPLOY.md](DEPLOY.md) for staging setup.
 
-> First sign-up requires email confirmation. After confirming, create or join a household.
+**Continue as guest** works without email delivery. Guest pantry data saves to D1;
+the browser keeps a seven-day, renewable HttpOnly session cookie. It is not a
+browser-only database. Create a recovery code from **Guest recovery code** in the
+account menu before signing out, clearing browser data, or moving devices. Only
+the code's SHA-256 digest is stored on the server; save the displayed code somewhere
+private. Recovery replaces the code and revokes the guest's previous sessions.
+Without a saved code or active session, that guest account cannot be recovered.
+The optional saved shopping snapshot below remains read-only offline.
 
----
+## PWA and offline use
 
-## Using it (quick guide)
+The build generates a versioned service worker and CSP headers for each exported
+HTML page. It precaches public static files, omits cookies during installation,
+and bypasses `/api/`, non-GET requests, and third-party requests. A waiting update
+shows **Reload and update** so users can finish edits first.
 
-1. **Sign in**, then **create a household** (or join one with an invite code from
-   the sidebar → *Invite partner*).
-2. **Stock your pantry** — *Add item*, or scan a barcode / snap a photo. Use the
-   **+/-** steppers to adjust amounts, **drag** a card onto a zone to move it, and
-   **sort** to surface what's expiring.
-3. **Cook** — open a recipe, scale it to your servings, tap *Cook now* to step
-   through and auto-deduct ingredients; or *Add missing to list*.
-4. **Plan the week** — drag recipes onto the meal-plan grid (or let the AI fill
-   it), then *Build week's list* on Shopping.
-5. **Learn** a technique anytime, and hit **⌘K** to jump around or quick-add an
-   ingredient from the database.
+After an authenticated shopping refresh, the browser may save one household's
+shopping snapshot in IndexedDB. **Saved shopping list** is a separate read-only
+view, displays its last-sync time, and expires after 24 hours. It cannot check
+items, make edits, or queue writes while offline. Signing out, switching a known
+identity/household, or discovering lost access clears the saved list. Storage
+availability and browser eviction can prevent offline access.
 
----
+Home-screen installation depends on browser and OS support. Capacitor and Tauri
+scaffolding remain in the repository, but native sign-in handoff, device builds,
+and store releases are not verified by the web implementation. Follow
+[the native plan](docs/plans/2026-09-20-plan4-native-shells.md) before relying on
+packaged apps; [PACKAGING.md](PACKAGING.md) contains the existing scaffolding
+instructions.
 
-## Tech stack
+## Development checks
 
-- **[Next.js 16](https://nextjs.org/)** (App Router, **static export**) · **React 19** · **TypeScript** (strict)
-- **[Supabase](https://supabase.com/)** — Postgres + Auth + Row-Level Security + Realtime + Storage + Edge Functions
-- **[Tailwind CSS v4](https://tailwindcss.com/)** with CSS-variable theming (the **AinaDara** warm-paper design system, light/dark)
-- **[Zustand](https://github.com/pmndrs/zustand)** state · **[date-fns](https://date-fns.org/)** · **[lucide-react](https://lucide.dev/)** icons
-- **[@zxing/browser](https://github.com/zxing-js/browser)** barcodes · **[Open Food Facts](https://world.openfoodfacts.org/)**, **Spoonacular**, **USDA FDC** data
-- **Packaging:** PWA · **[Capacitor](https://capacitorjs.com/)** (iOS/Android) · **[Tauri](https://tauri.app/)** (desktop)
-- **Testing:** **[Vitest](https://vitest.dev/)** + Testing Library + jsdom + jest-axe (~91% coverage), GitHub Actions CI
-- Hosted on **[Cloudflare Pages](https://pages.cloudflare.com/)** (Git-integrated auto-deploy)
+```bash
+npm run typecheck
+npm test
+npm run test:workers
+npm run test:scripts
+npm run build
+```
 
----
+The Worker suite exercises real local D1 bindings with email/AI providers mocked.
+The script suite checks migration/import behavior and PWA cache boundaries.
+Browser, device, delivered-email, and production checks are separate evidence;
+see [DEPLOY.md](DEPLOY.md). GitHub CI runs the typecheck, frontend coverage suite,
+Worker tests, script tests, and build.
 
 ## Project structure
 
-```
-src/
-  app/(app)/        authenticated pages: dashboard, pantry, recipes, explore,
-                    learn, meal-plan, shopping, analytics
-  app/preview/      design-system gallery (?theme=light|dark)
-  components/       ui primitives, sidebar, command palette, cook mode,
-                    recipe detail, toast, ingredient autocomplete, theme toggle
-  lib/              store (Zustand + Supabase actions), data-sync (realtime),
-                    auth-context, food-db (consortium client), nutrition,
-                    spoonacular, mealdb, stores, utils
-supabase/migrations/  schema, RLS, functions, food consortium + seeds
-scripts/              data importers (USDA, Open Food Facts) + icon generator
-src-tauri/            desktop app (Tauri)
-public/               icons, illustrations, manifest
+```text
+src/app/                  application, account, and saved-shopping pages
+src/components/           shared UI, barcode scanning, and update prompt
+src/lib/                  API client, auth context, store, sync, offline snapshot
+workers/api/              authentication, authorized data API, providers, catalog job
+migrations/auth/          Better Auth, rate-limit, and guest recovery tables
+migrations/d1/            domain schema and reference-data seeds
+scripts/                  tracked migrations, importers, icons, PWA/header build
+public/                   manifest, service-worker source, offline page, assets
+src-tauri/                existing desktop scaffolding
 ```
 
----
+The stack is Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zustand, Better Auth,
+Cloudflare Workers/D1/Workers AI/Email Service, and ZXing. Tests use Vitest,
+Testing Library, Node's test runner, and Miniflare. Household authorization lives
+in the API and SQL predicates; D1 does not provide the old PostgreSQL RLS model.
 
-## Develop
+## Deploy and maintain
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start the dev server. |
-| `npm run build` | Production static export to `out/`. |
-| `npm run typecheck` | `tsc --noEmit`. |
-| `npm test` / `npm run test:cov` | Run the Vitest suite (with coverage). |
-| `npm run cap:ios` / `cap:android` | Build + open the native project. |
-| `npm run tauri:dev` / `tauri:build` | Run / bundle the desktop app. |
+[DEPLOY.md](DEPLOY.md) documents explicit local, staging, and production commands,
+bindings, secrets, email activation, and release checks. Serve this application
+through the Worker: uploading `out/` to an arbitrary static host does not provide
+its authentication or data API. No Pages Git integration is assumed to deploy
+the Worker.
 
-Every change is gated by **type-check + tests + build** (also enforced in CI).
-
-### Data & security
-
-- All tables use **Row-Level Security**; household tables gate on
-  `is_household_member()` so members only ever see their own household's data.
-  Reference tables (the consortium) are public-read; only the service role writes.
-- Store writes go through Supabase and **throw on failure**; the UI surfaces
-  errors via toasts rather than silently failing, and optimistic updates revert.
-- Realtime keeps every device's pantry / list / plan in sync.
-
----
-
-## Deploy
-
-Static export — any static host works. We use **Cloudflare Pages** with Git
-integration: every push to `main` rebuilds and deploys. See
-[`DEPLOY.md`](./DEPLOY.md) for the build command (`npm run build`), output dir
-(`out`), and the Supabase auth redirect-URL config.
-
-## Versioning
-
-[Semantic Versioning](https://semver.org/) with a [Keep a
-Changelog](https://keepachangelog.com/) [`CHANGELOG.md`](./CHANGELOG.md). Current
-version is in [`package.json`](./package.json).
+Reference-data import commands are in [scripts/README.md](scripts/README.md).
+The Worker also contains a bounded hourly Open Food Facts refresh with job status
+stored in D1. The current package version is in [package.json](package.json);
+release notes belong in [CHANGELOG.md](CHANGELOG.md).

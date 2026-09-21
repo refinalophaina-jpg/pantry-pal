@@ -8,10 +8,10 @@
  *   - recipe_catalog  (shared recipe corpus)
  *
  * Row mappers are pure and exported so they can be unit-tested without a
- * network; the query helpers wrap the Supabase client + search RPCs.
+ * network; the query helpers use the authenticated Workers API.
  */
 
-import { getSupabase } from "./supabase";
+import { apiRequest } from "./api-client";
 import type { Nutrition, Recipe } from "./types";
 
 export interface Ingredient {
@@ -60,7 +60,7 @@ export interface Technique {
 
 // snake_case → undefined-safe number
 function num(v: unknown): number | undefined {
-  return v === null || v === undefined ? undefined : Number(v);
+  return v === null || v === undefined || !Number.isFinite(Number(v)) || Number(v) < 0 ? undefined : Number(v);
 }
 
 export function ingredientFromRow(row: Record<string, unknown>): Ingredient {
@@ -152,70 +152,30 @@ export function ingredientNutrition(ing: Ingredient): Nutrition | null {
 
 // ---- Queries -------------------------------------------------------------
 
-/** Typo-tolerant ingredient search (prefix + full-text + trigram + aliases). */
-export async function searchIngredients(
-  q: string,
-  limit = 20,
-): Promise<Ingredient[]> {
-  const { data, error } = await getSupabase().rpc("search_ingredients", {
-    q,
-    lim: limit,
-  });
-  if (error) throw new Error(error.message);
-  return ((data as Record<string, unknown>[]) ?? []).map(ingredientFromRow);
+/** Bounded ingredient search through the shared catalog. */
+export async function searchIngredients(q: string, limit = 20): Promise<Ingredient[]> {
+  const { data } = await apiRequest<{ data: Record<string, unknown>[] }>(`/api/catalog/ingredients?${new URLSearchParams({ q, limit: String(limit) })}`);
+  return data.map(ingredientFromRow);
 }
 
-/** Typo-tolerant search over the public recipe catalog → app Recipe[]. */
-export async function searchRecipeCatalog(
-  q: string,
-  limit = 20,
-): Promise<Recipe[]> {
-  const { data, error } = await getSupabase().rpc("search_recipe_catalog", {
-    q,
-    lim: limit,
-  });
-  if (error) throw new Error(error.message);
-  return ((data as Record<string, unknown>[]) ?? []).map(catalogRecipeFromRow);
+export async function searchRecipeCatalog(q: string, limit = 20): Promise<Recipe[]> {
+  const { data } = await apiRequest<{ data: Record<string, unknown>[] }>(`/api/catalog/recipes?${new URLSearchParams({ q, limit: String(limit) })}`);
+  return data.map(catalogRecipeFromRow);
 }
 
-/** Look up a branded product by barcode (EAN/UPC). */
-export async function lookupFoodByBarcode(
-  barcode: string,
-): Promise<FoodProduct | null> {
-  const { data, error } = await getSupabase()
-    .from("foods")
-    .select("*")
-    .eq("barcode", barcode)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data ? foodFromRow(data as Record<string, unknown>) : null;
+export async function lookupFoodByBarcode(barcode: string): Promise<FoodProduct | null> {
+  const { data } = await apiRequest<{ data: Record<string, unknown> | null }>(`/api/catalog/foods?${new URLSearchParams({ barcode })}`);
+  return data ? foodFromRow(data) : null;
 }
 
-/**
- * Precise ingredient lookup by slug or exact name (case-insensitive) — for
- * nutrition resolution, where we want the right row, not a fuzzy best guess.
- */
-export async function lookupIngredientByName(
-  name: string,
-): Promise<Ingredient | null> {
-  const n = name.trim().toLowerCase();
-  if (!n) return null;
-  const slug = n.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  const { data, error } = await getSupabase()
-    .from("ingredients")
-    .select("*")
-    .or(`slug.eq.${slug},name.ilike.${n}`)
-    .limit(1);
-  if (error) throw new Error(error.message);
-  const rows = (data as Record<string, unknown>[]) ?? [];
-  return rows.length ? ingredientFromRow(rows[0]) : null;
+/** Exact name/slug lookup, never a guessed fuzzy nutrition match. */
+export async function lookupIngredientByName(name: string): Promise<Ingredient | null> {
+  if (!name.trim()) return null;
+  const { data } = await apiRequest<{ data: Record<string, unknown> | null }>(`/api/catalog/ingredients?${new URLSearchParams({ name: name.trim().toLowerCase() })}`);
+  return data ? ingredientFromRow(data) : null;
 }
 
-/** List cooking techniques, optionally filtered by category. */
 export async function listTechniques(category?: string): Promise<Technique[]> {
-  let query = getSupabase().from("techniques").select("*").order("title");
-  if (category) query = query.eq("category", category);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return ((data as Record<string, unknown>[]) ?? []).map(techniqueFromRow);
+  const { data } = await apiRequest<{ data: Record<string, unknown>[] }>(`/api/catalog/techniques${category ? `?${new URLSearchParams({ category })}` : ""}`);
+  return data.map(techniqueFromRow);
 }

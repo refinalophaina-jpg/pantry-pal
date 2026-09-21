@@ -94,6 +94,10 @@ describe("searchByName / lookupMeal", () => {
 });
 
 describe("randomMeals", () => {
+  it("reports a complete provider outage instead of silently returning an empty success", async () => {
+    fetchMock.mockRejectedValue(new Error("network"));
+    await expect(randomMeals(3)).rejects.toThrow("temporarily unavailable");
+  });
   it("dedupes by id across parallel calls", async () => {
     // every /random.php call returns the same meal -> dedupe to one
     fetchMock.mockResolvedValue(ok({ meals: [fullMeal({ idMeal: "7" })] }));

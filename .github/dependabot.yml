@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      next:
+        patterns: ["next", "react", "react-dom", "@types/react*"]
+      cloudflare:
+        patterns: ["wrangler", "miniflare", "@cloudflare/*", "better-auth"]
+      native-shells:
+        patterns: ["@capacitor/*", "@tauri-apps/*"]
+      testing:
+        patterns: ["vitest", "@vitest/*", "@playwright/*", "@testing-library/*", "jsdom", "jest-axe", "@types/jest-axe"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly

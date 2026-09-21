@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sortPantry } from "./page";
+import { sortPantry } from "@/lib/pantry-sort";
 import type { PantryItem } from "@/lib/types";
 
 function item(over: Partial<PantryItem>): PantryItem {

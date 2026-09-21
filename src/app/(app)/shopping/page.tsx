@@ -62,7 +62,7 @@ export default function ShoppingPage() {
     clearCompleted,
     generateFromRecipe,
     buildWeekList,
-    addPantryItem,
+    moveShoppingToPantry,
   } = useSyncedActions();
   const run = useAction();
   const { toast } = useToast();
@@ -87,16 +87,7 @@ export default function ShoppingPage() {
   // "Got it" — move a purchased item into the pantry and off the list.
   function moveToPantry(it: (typeof shopping)[number]) {
     run(
-      async () => {
-        await addPantryItem({
-          name: it.name,
-          category: it.category === "This week" ? "Other" : it.category,
-          quantity: it.quantity,
-          unit: it.unit,
-          zone: "pantry",
-        });
-        await removeShoppingItem(it.id);
-      },
+      () => moveShoppingToPantry(it.id),
       {
         success: `${it.name} moved to your pantry.`,
         error: "Couldn't move the item — try again.",
@@ -116,19 +107,24 @@ export default function ShoppingPage() {
   const [editItem, setEditItem] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!household) return;
-    listStores(household.id).then(setStores).catch(() => {});
-  }, [household]);
+    let cancelled = false;
+    setStores([]);
+    setLocations([]);
+    setActiveStoreId("");
+    if (household) listStores(household.id).then((items) => { if (!cancelled) setStores(items); }).catch((error) => {
+      if (!cancelled) toast(error instanceof Error ? error.message : "Could not load your stores.", "warn");
+    });
+    return () => { cancelled = true; };
+  }, [household?.id, user?.id, toast]);
 
   useEffect(() => {
-    if (!household || !activeStoreId) {
-      setLocations([]);
-      return;
-    }
-    listItemLocations(household.id, activeStoreId)
-      .then(setLocations)
-      .catch(() => {});
-  }, [household, activeStoreId]);
+    let cancelled = false;
+    setLocations([]);
+    if (household && activeStoreId) listItemLocations(household.id, activeStoreId)
+      .then((items) => { if (!cancelled) setLocations(items); })
+      .catch((error) => { if (!cancelled) toast(error instanceof Error ? error.message : "Could not load this store's layout.", "warn"); });
+    return () => { cancelled = true; };
+  }, [household?.id, user?.id, activeStoreId, toast]);
 
   const activeStore = stores.find((s) => s.id === activeStoreId);
 
@@ -293,6 +289,7 @@ export default function ShoppingPage() {
           <Card>
             <div className="flex flex-col sm:flex-row gap-2">
               <Input
+                aria-label="Shopping item name"
                 placeholder="Add an item…"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -301,12 +298,14 @@ export default function ShoppingPage() {
               />
               <div className="flex gap-2">
                 <Input
+                  aria-label="Shopping quantity"
                   type="number"
                   className="w-20"
                   value={quantity}
                   onChange={(e) => setQuantity(Number(e.target.value))}
                 />
                 <Select
+                  aria-label="Shopping unit"
                   className="w-20"
                   value={unit}
                   onChange={(e) => setUnit(e.target.value as UnitType)}
@@ -315,7 +314,7 @@ export default function ShoppingPage() {
                     <option key={u}>{u}</option>
                   ))}
                 </Select>
-                <Button onClick={addQuick}>
+                <Button onClick={addQuick} aria-label="Add shopping item">
                   <Plus className="size-4" />
                 </Button>
               </div>
@@ -328,6 +327,7 @@ export default function ShoppingPage() {
                 Shopping at
               </span>
               <Select
+                aria-label="Shopping store"
                 className="w-44"
                 value={activeStoreId}
                 onChange={(e) => setActiveStoreId(e.target.value)}
@@ -410,10 +410,12 @@ export default function ShoppingPage() {
                   {items.map((it) => (
                     <li
                       key={it.id}
-                      className="flex items-center gap-3 group"
+                      className="flex items-center gap-2 group"
                     >
-                      <input
+                      <label className="size-11 shrink-0 inline-flex items-center justify-center">
+                        <input
                         type="checkbox"
+                        aria-label={`Mark ${it.name} as purchased`}
                         checked={it.done}
                         onChange={() =>
                           run(() => toggleShoppingItem(it.id), {
@@ -421,8 +423,9 @@ export default function ShoppingPage() {
                           })
                         }
                         className="size-4 accent-[var(--accent)]"
-                      />
-                      <div className="flex-1">
+                        />
+                      </label>
+                      <div className="flex-1 min-w-0 break-words">
                         <div
                           className={`text-sm ${
                             it.done
@@ -459,7 +462,7 @@ export default function ShoppingPage() {
                       {activeStoreId && (
                         <button
                           onClick={() => setEditItem(it.name)}
-                          className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--accent-hover)]"
+                          className="size-11 shrink-0 inline-flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100 text-[var(--text-muted)] hover:text-[var(--accent-hover)]"
                           aria-label="Set aisle / shelf / price"
                           title="Set aisle / shelf / price"
                         >
@@ -468,7 +471,7 @@ export default function ShoppingPage() {
                       )}
                       <button
                         onClick={() => moveToPantry(it)}
-                        className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--accent-hover)]"
+                        className="size-11 shrink-0 inline-flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100 text-[var(--text-muted)] hover:text-[var(--accent-hover)]"
                         aria-label="Got it — move to pantry"
                         title="Got it — move to pantry"
                       >
@@ -480,7 +483,7 @@ export default function ShoppingPage() {
                             error: "Couldn't remove the item — try again.",
                           })
                         }
-                        className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--danger)]"
+                        className="size-11 shrink-0 inline-flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100 text-[var(--text-muted)] hover:text-[var(--danger)]"
                         aria-label="Remove"
                       >
                         <Trash2 className="size-4" />

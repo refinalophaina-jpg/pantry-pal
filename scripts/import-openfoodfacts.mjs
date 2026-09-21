@@ -1,165 +1,124 @@
 #!/usr/bin/env node
-/**
- * Import branded products from Open Food Facts into public.foods.
- *
- * Open Food Facts data is open (ODbL). Nutriments are per 100 g.
- *
- * Env:
- *   SUPABASE_URL                 your project URL
- *   SUPABASE_SERVICE_ROLE_KEY    service role key (server only!)
- *
- * Usage:
- *   node scripts/import-openfoodfacts.mjs 737628064502 3017620422003   # by barcode
- *   node scripts/import-openfoodfacts.mjs --search "oat milk" --pages 2 # by search
- *   node scripts/import-openfoodfacts.mjs --refresh                     # re-sync catalog
- *
- * --refresh re-fetches every product already in `foods` (source
- * openfoodfacts) in batches of 100 via the v2 search API, picking up
- * renames, recipe changes, and newly-filled nutriment data. Run monthly —
- * .github/workflows/refresh-foods.yml does exactly that.
- *
- * Idempotent: upserts on the `barcode` unique key.
- */
-import { createClient } from "@supabase/supabase-js";
+/** Open Food Facts (ODbL), branded products with per-100 g nutrition, into D1. */
+import { fail, fetchJson, isMain, parseTargetArgs, sqlValue, targetHelp, upsertRows, withD1 } from "./d1-tools.mjs";
 
-const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error("Missing env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY");
-  process.exit(1);
-}
+const UA = "PantryPal/1.0 (catalog importer; +https://pantry.ainadara.com)";
+const headers = { "User-Agent": UA, Accept: "application/json" };
+const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
+const num = value => typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value * 100) / 100 : null;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false },
-});
-
-const UA = "PantryPal/0.4 (data importer; +https://pantry-pal.pages.dev)";
-
-function num(v) {
-  return typeof v === "number" ? Math.round(v * 100) / 100 : undefined;
-}
-
-function toRow(p) {
-  if (!p?.code || !(p.product_name || p.product_name_en)) return null;
-  const n = p.nutriments ?? {};
+export function toRow(product) {
+  const code = String(product?.code ?? "");
+  const name = product?.product_name_en || product?.product_name;
+  if (!/^\d{4,32}$/.test(code) || typeof name !== "string" || !name.trim()) return null;
+  const nutrients = product.nutriments ?? {};
   return {
-    barcode: String(p.code),
-    name: p.product_name_en || p.product_name,
-    brand: (p.brands || "").split(",")[0]?.trim() || null,
-    category: (p.categories || "").split(",").pop()?.trim() || "Other",
-    serving_size: p.serving_size || null,
-    calories: num(n["energy-kcal_100g"]),
-    protein_g: num(n.proteins_100g),
-    carbs_g: num(n.carbohydrates_100g),
-    fat_g: num(n.fat_100g),
-    fiber_g: num(n.fiber_100g),
+    barcode: code,
+    name: name.trim(),
+    brand: typeof product.brands === "string" ? product.brands.split(",")[0]?.trim() || null : null,
+    category: typeof product.categories === "string" ? product.categories.split(",").pop()?.trim() || "Other" : "Other",
+    serving_size: typeof product.serving_size === "string" ? product.serving_size || null : null,
+    calories: num(nutrients["energy-kcal_100g"]),
+    protein_g: num(nutrients.proteins_100g),
+    carbs_g: num(nutrients.carbohydrates_100g),
+    fat_g: num(nutrients.fat_100g),
+    fiber_g: num(nutrients.fiber_100g),
     source: "openfoodfacts",
-    source_id: String(p.code),
+    source_id: code,
   };
 }
 
-async function byBarcode(code) {
-  const res = await fetch(
-    `https://world.openfoodfacts.org/api/v2/product/${code}.json`,
-    { headers: { "User-Agent": UA } },
-  );
-  if (!res.ok) return null;
-  const json = await res.json();
-  return json.status === 1 ? toRow(json.product) : null;
+export async function byBarcode(code, fetchImpl = fetch) {
+  if (!/^\d{4,32}$/.test(code)) throw new Error(`Invalid barcode: ${code}.`);
+  const payload = await fetchJson(`https://world.openfoodfacts.org/api/v2/product/${code}.json`, { headers }, fetchImpl);
+  if (payload.status === 0) return null;
+  if (payload.status !== 1 || !payload.product) throw new Error("Open Food Facts returned an invalid product response.");
+  return toRow(payload.product);
+}
+
+function productRows(payload) {
+  if (!Array.isArray(payload.products)) throw new Error("Open Food Facts returned an invalid search response.");
+  const rows = payload.products.map(toRow).filter(Boolean);
+  const skipped = payload.products.length - rows.length;
+  if (skipped) console.warn(`${skipped} products skipped: missing valid barcode or name.`);
+  return rows;
 }
 
 async function bySearch(term, pages) {
   const rows = [];
   for (let page = 1; page <= pages; page++) {
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
-      term,
-    )}&json=1&page_size=50&page=${page}`;
-    const res = await fetch(url, { headers: { "User-Agent": UA } });
-    if (!res.ok) break;
-    const json = await res.json();
-    for (const p of json.products ?? []) {
-      const r = toRow(p);
-      if (r) rows.push(r);
-    }
+    if (page > 1) await sleep(6500); // OFF search rate: at most 10 requests/minute.
+    const url = new URL("https://world.openfoodfacts.org/cgi/search.pl");
+    for (const [key, value] of Object.entries({ search_terms: term, json: 1, page_size: 50, page })) url.searchParams.set(key, String(value));
+    const payload = await fetchJson(url, { headers });
+    rows.push(...productRows(payload));
+    if (!payload.products.length) break;
   }
   return rows;
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/**
- * Re-fetch every cataloged OFF product in batches of 100 (the v2 search API
- * accepts comma-separated barcodes), so the monthly run stays a handful of
- * requests instead of one per product.
- */
-async function refreshCatalog() {
+async function refreshCatalog(d1) {
   const all = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("foods")
-      .select("barcode")
-      .eq("source", "openfoodfacts")
-      .not("barcode", "is", null)
-      .order("barcode")
-      .range(from, from + PAGE - 1);
-    if (error) {
-      console.error("reading foods failed:", error.message);
-      process.exit(1);
+  let cursor = "";
+  for (;;) {
+    const results = await d1.query(`SELECT barcode FROM foods WHERE source='openfoodfacts' AND barcode IS NOT NULL AND barcode>${sqlValue(cursor)} ORDER BY barcode LIMIT 1000;`);
+    const page = results.flatMap(result => result.results ?? []);
+    for (const row of page) {
+      if (!/^\d{4,32}$/.test(row.barcode)) throw new Error("Existing catalog contains an invalid barcode; repair it before refreshing.");
+      all.push(row.barcode);
     }
-    all.push(...(data ?? []).map((r) => String(r.barcode)));
-    if (!data || data.length < PAGE) break;
+    if (page.length < 1000) break;
+    cursor = page.at(-1).barcode;
   }
-  console.log(`Refreshing ${all.length} cataloged products…`);
-
+  console.log(`Refreshing ${all.length} cataloged products.`);
   const rows = [];
-  const FIELDS =
-    "code,product_name,product_name_en,brands,categories,serving_size,nutriments";
-  for (let i = 0; i < all.length; i += 100) {
-    const chunk = all.slice(i, i + 100);
-    const url = `https://world.openfoodfacts.org/api/v2/search?code=${chunk.join(
-      ",",
-    )}&fields=${FIELDS}&page_size=100`;
-    const res = await fetch(url, { headers: { "User-Agent": UA } });
-    if (!res.ok) {
-      console.warn(`batch ${i / 100 + 1}: HTTP ${res.status}, skipping`);
-      continue;
-    }
-    const json = await res.json();
-    for (const p of json.products ?? []) {
-      const r = toRow(p);
-      if (r) rows.push(r);
-    }
-    console.log(`  batch ${i / 100 + 1}/${Math.ceil(all.length / 100)}`);
-    if (i + 100 < all.length) await sleep(6500); // OFF politeness: ≤10 search req/min
+  for (let start = 0; start < all.length; start += 100) {
+    if (start) await sleep(6500);
+    const codes = all.slice(start, start + 100);
+    const url = new URL("https://world.openfoodfacts.org/api/v2/search");
+    url.searchParams.set("code", codes.join(","));
+    url.searchParams.set("fields", "code,product_name,product_name_en,brands,categories,serving_size,nutriments");
+    url.searchParams.set("page_size", "100");
+    const batch = productRows(await fetchJson(url, { headers })).filter(row => codes.includes(row.barcode));
+    const found = new Set(batch.map(row => row.barcode));
+    const missing = codes.filter(code => !found.has(code));
+    if (missing.length) console.warn(`Products absent from upstream response (existing rows retained): ${missing.join(", ")}`);
+    rows.push(...batch);
   }
   return rows;
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  let rows = [];
-  const searchIdx = args.indexOf("--search");
-  if (args.includes("--refresh")) {
-    rows = await refreshCatalog();
-  } else if (searchIdx !== -1) {
-    const term = args[searchIdx + 1];
-    const pagesIdx = args.indexOf("--pages");
-    const pages = pagesIdx !== -1 ? Number(args[pagesIdx + 1]) : 1;
-    rows = await bySearch(term, pages);
-  } else {
-    for (const code of args) {
-      const r = await byBarcode(code);
-      if (r) rows.push(r);
-      console.log(r ? `✓ ${code} ${r.name}` : `✗ ${code} not found`);
-    }
+export function importMode(args) {
+  if (args[0] === "--refresh" && args.length === 1) return { type: "refresh" };
+  if (args[0] === "--search") {
+    const term = args[1]?.trim();
+    const pages = args.length === 4 && args[2] === "--pages" ? Number(args[3]) : args.length === 2 ? 1 : NaN;
+    if (!term || term.startsWith("--") || term.length > 250 || !Number.isInteger(pages) || pages < 1 || pages > 100) throw new Error("Use --search <term> [--pages 1..100].");
+    return { type: "search", term, pages };
   }
-  // De-dupe by barcode (search can repeat across pages).
-  const seen = new Set();
-  rows = rows.filter((r) => (seen.has(r.barcode) ? false : seen.add(r.barcode)));
-  if (!rows.length) { console.log("nothing to import"); return; }
-  const { error } = await supabase.from("foods").upsert(rows, { onConflict: "barcode" });
-  if (error) { console.error("upsert failed:", error.message); process.exit(1); }
-  console.log(`\nImported/updated ${rows.length} products.`);
+  if (!args.length || args.some(arg => !/^\d{4,32}$/.test(arg))) throw new Error("Provide barcodes, --search <term> [--pages N], or --refresh.");
+  return { type: "barcodes", codes: [...new Set(args)] };
 }
 
-main();
+export async function main(argv = process.argv.slice(2)) {
+  if (argv.includes("--help")) { console.log(`Import Open Food Facts into D1.\n[barcodes...] | --search <term> [--pages 1..100] | --refresh\n${targetHelp}`); return; }
+  const { target, args } = parseTargetArgs(argv);
+  const mode = importMode(args);
+  await withD1(target, async d1 => {
+    let rows;
+    if (mode.type === "refresh") rows = await refreshCatalog(d1);
+    else if (mode.type === "search") rows = await bySearch(mode.term, mode.pages);
+    else {
+      rows = [];
+      for (const code of mode.codes) {
+        const row = await byBarcode(code);
+        if (row) rows.push(row);
+        else console.warn(`${code}: no usable product found.`);
+      }
+    }
+    rows = [...new Map(rows.map(row => [row.barcode, row])).values()];
+    await upsertRows(d1, "foods", rows);
+    console.log(`Imported/updated ${rows.length} products.`);
+  });
+}
+if (isMain(import.meta.url)) main().catch(fail);

@@ -153,3 +153,10 @@ describe('D1 household API (real local workerd binding)',()=>{
     expect((await call('/api/catalog/ingredients','POST',{name:'Unauthorized catalog write'})).status).toBe(405);
   });
 });
+
+it('uses narrow raw-produce aliases for atomic cooking without conflating cooked foods',async()=>{
+  await call(`${root()}/pantry`,'POST',{name:'Garlic',quantity:20,unit:'g',zone:'pantry'});
+  const result=await op({type:'cook',ingredients:[{name:'Raw garlic',quantity:12,unit:'g'}]});
+  expect(result.status).toBe(200);
+  expect((await snap()).pantry_items.find((r:{name:string})=>r.name==='Garlic').quantity).toBe(8);
+});

@@ -32,8 +32,8 @@ test("preserves textual barcodes, decimal nutrition, unknowns and USDA mappings"
   assert.equal(row.fat_g, null);
   assert.equal(offRow({ code: "1234" }), null);
   assert.equal(pickNutrients([{ nutrient: { id: 1008 }, amount: 12.345 }]).calories, 12.35);
-  const food = usdaRow("olive oil", { fdcId: 123, foodCategory: "Fats and Oils", foodNutrients: [] });
-  assert.equal(food.slug, "olive-oil");
+  const food = usdaRow("olive oil", { fdcId: 123, description: "Oil, olive, salad or cooking", foodCategory: "Fats and Oils", foodNutrients: [] });
+  assert.equal(food.slug, "fdc-123");
   assert.equal(food.category, "Oils & Condiments");
   assert.equal(food.calories, null);
 });
@@ -42,14 +42,14 @@ test("uses SQLite-safe literals, idempotent upserts, and retains curated aliases
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("CREATE TABLE ingredients(id TEXT PRIMARY KEY,slug TEXT UNIQUE,name TEXT,category TEXT,calories REAL,protein_g REAL,carbs_g REAL,fat_g REAL,fiber_g REAL,source TEXT,source_id TEXT,aliases TEXT DEFAULT '[]',updated_at TEXT);");
-    const row = usdaRow("cook's rice", { fdcId: 123, foodNutrients: [] });
+    const row = usdaRow("cook's rice", { fdcId: 123, description: "Rice, cooked", foodNutrients: [] });
     db.exec(upsertSql("ingredients", row));
     db.exec("UPDATE ingredients SET aliases='[\"rice\"]';");
     const original = db.prepare("SELECT id FROM ingredients").get().id;
     db.exec(upsertSql("ingredients", { ...row, calories: 125.7 }));
     const saved = db.prepare("SELECT * FROM ingredients").get();
     assert.equal(saved.id, original);
-    assert.equal(saved.name, "Cook'S Rice");
+    assert.equal(saved.name, "Rice, cooked");
     assert.equal(saved.calories, 125.7);
     assert.equal(saved.aliases, '["rice"]');
     assert.equal(db.prepare("SELECT count(*) AS n FROM ingredients").get().n, 1);

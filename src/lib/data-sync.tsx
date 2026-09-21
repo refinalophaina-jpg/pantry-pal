@@ -123,6 +123,7 @@ export function useSyncedActions() {
     generateFromRecipe: (recipe: string | Recipe, servings?: number) =>
       store.generateFromRecipe(recipe, ctx, servings),
     moveShoppingToPantry: (id: string) => store.moveShoppingToPantry(id, ctx),
+    planPrep: (recipes: Recipe[], start: string, people: number) => store.planPrep(recipes, start, people, ctx),
     buildWeekList: (dates: string[]) => store.buildWeekList(dates, ctx),
     addMealPlan: (entry: Parameters<typeof store.addMealPlan>[0]) =>
       store.addMealPlan(entry, ctx),

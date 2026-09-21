@@ -5,6 +5,22 @@ All notable changes to Pantry Pal are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 2026-09-21 content update
+
+### Added
+- Three-day prep sessions for Thai/Indian and Nigerian/Vietnamese vegetarian-friendly meals, portion scaling, pantry-first shopping, and fresh/cupboard groups.
+- Six detailed prep recipes, nutrition and batch storage guidance, and a searchable food guide with 32 traceable USDA records.
+- Meal-plan recipe dialogs, favorites, shopping and cooking actions, plus subject illustrations and resilient lazy-loaded provider photos.
+
+### Fixed
+- Nutrition estimates preserve preparation state, require known weight conversions, and disclose incomplete subtotals.
+- Recipe pantry badges aggregate compatible units; raw-produce aliases match stock consistently in the client and Worker.
+- USDA imports retain exact returned food descriptions rather than assigning broad search-query names.
+- Mobile navigation identifies destinations by route instead of fragile array positions.
+
+### Performance
+- Bounded public recipe cache, four concurrent nutrition lookups, and incremental Explore/food-guide grids.
+
 ## [0.10.0] — 2026-09-21
 
 ### Added

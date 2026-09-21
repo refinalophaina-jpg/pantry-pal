@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Image from "next/image";
+import { FoodVisual } from "@/components/food-visual";
 import {
   Bookmark,
   BookmarkCheck,
@@ -252,42 +252,7 @@ function RecipeCard({
   const [open, setOpen] = useState(false);
   return (
     <Card id={recipe.id} className="flex flex-col p-0 overflow-hidden">
-      {recipe.imageUrl ? (
-        <div className="relative aspect-[16/9] bg-[var(--bg)]">
-          <Image
-            src={recipe.imageUrl}
-            alt={recipe.name}
-            fill
-            sizes="(max-width: 768px) 100vw, 50vw"
-            className="object-cover"
-            unoptimized
-          />
-          {recipe.savedId && (
-            <div className="absolute top-2 right-2">
-              <Badge tone="info" className="bg-black/50 text-white border-0">
-                <BookmarkCheck className="size-3" /> Saved
-              </Badge>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div
-          className="relative aspect-[16/9] grid place-items-center text-white"
-          style={{ backgroundImage: cuisineGradient(recipe.cuisine) }}
-        >
-          <Utensils className="size-9 opacity-90" />
-          <span className="absolute bottom-2 left-3 text-xs font-medium opacity-90">
-            {recipe.cuisine}
-          </span>
-          {recipe.savedId && (
-            <div className="absolute top-2 right-2">
-              <Badge tone="info" className="bg-black/40 text-white border-0">
-                <BookmarkCheck className="size-3" /> Saved
-              </Badge>
-            </div>
-          )}
-        </div>
-      )}
+      <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} />
       <div className="p-5 flex-1 flex flex-col">
       <div className="flex items-start justify-between gap-2">
         <div>

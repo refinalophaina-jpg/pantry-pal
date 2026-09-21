@@ -5,9 +5,10 @@ entry point `workers/api/index.ts`**. Workers Static Assets serves the public
 files; same-origin `/api/*` requests run authentication, authorization, D1 queries,
 and provider integrations. Supabase is not part of the deployed runtime.
 
-The owner confirmed there is no existing account or household data to preserve.
-The current setup initializes fresh D1 databases and reference seeds. Historical
-PostgreSQL migrations under `supabase/` are not executable D1 migrations.
+The owner confirmed no existing data needed preservation for the initial migration.
+The live D1 databases now hold real account and household data: preserve all of it
+during updates. Use tracked, additive migrations; never reset or reseed household
+tables. Historical PostgreSQL migrations under `supabase/` are not executable D1 migrations.
 
 ## Environments and bindings
 

@@ -1,3 +1,4 @@
+import { ingredientName } from "../../src/lib/ingredient-name";
 import { ApiError, id, invalid, number, object, only, oneOf, parseFields, parseIngredients, text, type Row, type SqlValue } from './domain-validation';
 import { collections } from './domain-collections';
 import { assertion, clearAssertion, insertStatement, memberSql, requireMember } from './domain-repository';
@@ -69,7 +70,7 @@ async function applyOperation(env:Env, hid:string, uid:string, body:Row):Promise
         const [family,factor]=conversion[ingredient.unit];
         let remaining=ingredient.quantity*factor;
         for(const item of rows.results) {
-          if(item.name.trim().toLocaleLowerCase()!==ingredient.name.trim().toLocaleLowerCase()) continue;
+          if(ingredientName(item.name)!==ingredientName(ingredient.name)) continue;
           const target=conversion[item.unit];
           if(!target || target[0]!==family) continue;
           const prior=allocations.get(item.id)?.quantity??0;

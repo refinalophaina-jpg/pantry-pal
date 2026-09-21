@@ -13,6 +13,9 @@ import type {
   UnitType,
   StorageZone,
 } from "./types";
+import { ingredientName } from "./ingredient-name";
+import { foodStorage } from "./food-storage";
+import { prepPortion, prepDates } from "./prep-planner";
 import { seedRecipes, seedEquipment, seedDeals } from "./seed-data";
 import { ApiError, apiRequest, householdPath, requestDataRefresh as dispatchDataRefresh } from "./api-client";
 import { saveOfflineShopping } from "./offline-shopping";
@@ -91,6 +94,7 @@ interface AppState {
   moveShoppingToPantry: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
   buildWeekList: (dates: string[], ctx: SyncedActionsCtx) => Promise<number>;
 
+  planPrep: (recipes: Recipe[], start: string, people: number, ctx: SyncedActionsCtx) => Promise<number>;
   addMealPlan: (
     entry: Omit<MealPlanEntry, "id">,
     ctx: SyncedActionsCtx,
@@ -152,7 +156,7 @@ export function quantityInUnit(quantity: number, from: UnitType, to: UnitType): 
 }
 
 export function availableQuantity(items: Array<{ name: string; unit: UnitType; quantity: number }>, name: string, unit: UnitType) {
-  return items.filter((item) => item.name.trim().toLowerCase() === name.trim().toLowerCase())
+  return items.filter((item) => ingredientName(item.name) === ingredientName(name))
     .reduce((total, item) => total + (quantityInUnit(item.quantity, item.unit, unit) ?? 0), 0);
 }
 
@@ -166,7 +170,7 @@ function resolveRecipe(value: string | Recipe): Recipe {
 function mergeIngredientNeeds(ingredients: Recipe["ingredients"]) {
   const combined: Recipe["ingredients"] = [];
   for (const ing of ingredients.filter((i) => !i.optional)) {
-    const previous = combined.find((p) => p.name.trim().toLowerCase() === ing.name.trim().toLowerCase() && quantityInUnit(ing.quantity, ing.unit, p.unit) !== null);
+    const previous = combined.find((p) => ingredientName(p.name) === ingredientName(ing.name) && quantityInUnit(ing.quantity, ing.unit, p.unit) !== null);
     if (previous) previous.quantity += quantityInUnit(ing.quantity, ing.unit, previous.unit)!;
     else combined.push({ ...ing });
   }
@@ -457,7 +461,7 @@ export const useAppStore = create<AppState>()(
         if (isCurrent(ctx)) get()._removeShopping(id);
         requestDataRefresh();
       },
-      moveShoppingToPantry: async (id, ctx) => { await operation(ctx, "move-shopping", { itemId: id, zone: "pantry" }); },
+      moveShoppingToPantry: async (id, ctx) => { const item = get().shopping.find(s => s.id === id); await operation(ctx, "move-shopping", { itemId: id, zone: item ? foodStorage(item.name).zone : "pantry" }); },
       clearCompleted: async (ctx) => {
         if (get().shopping.some((s) => s.done)) await operation(ctx, "clear-completed", {});
       },
@@ -465,7 +469,7 @@ export const useAppStore = create<AppState>()(
         const recipe = resolveRecipe(value);
         const items = scaledIngredients(recipe, servings).flatMap((ing) => {
           const deficit = ing.quantity - availableQuantity(get().pantry, ing.name, ing.unit) - availableQuantity(get().shopping.filter((s) => !s.done), ing.name, ing.unit);
-          return deficit > 1e-8 ? [{ name: ing.name, quantity: Math.max(0.001, Math.round(deficit * 1000) / 1000), unit: ing.unit, category: "From recipe", from_recipe: recipe.name }] : [];
+          return deficit > 1e-8 ? [{ name: ing.name, quantity: Math.max(0.001, Math.round(deficit * 1000) / 1000), unit: ing.unit, category: foodStorage(ing.name).category, from_recipe: recipe.name }] : [];
         });
         if (items.length) await operation(ctx, "add-shopping-batch", { items });
       },
@@ -480,10 +484,26 @@ export const useAppStore = create<AppState>()(
         }
         const items = mergeIngredientNeeds(ingredients).flatMap((item) => {
           const deficit = item.quantity - availableQuantity(pantry, item.name, item.unit) - availableQuantity(shopping.filter((s) => !s.done), item.name, item.unit);
-          return deficit > 1e-8 ? [{ name: item.name, unit: item.unit, quantity: Math.max(0.001, Math.round(deficit * 1000) / 1000), category: "This week", from_recipe: "Weekly meal plan" }] : [];
+          return deficit > 1e-8 ? [{ name: item.name, unit: item.unit, quantity: Math.max(0.001, Math.round(deficit * 1000) / 1000), category: foodStorage(item.name).category, from_recipe: "Weekly meal plan" }] : [];
         });
         if (items.length) await operation(ctx, "add-shopping-batch", { items });
         return items.length;
+      },
+      planPrep: async (recipes, start, people, ctx) => {
+        if (recipes.length !== 2) throw new Error("Choose a lunch and dinner recipe.");
+        const dates = prepDates(start);
+        const entries: Array<{date: string; meal: string; recipe_id: string; recipe_name: string}> = [];
+        for (const [index, recipe] of recipes.entries()) {
+          const meal = index === 0 ? 'lunch' : 'dinner';
+          const emptyDates = dates.filter(date => !get().mealPlan.some(entry => entry.date === date && entry.meal === meal));
+          if (!emptyDates.length) continue;
+          const portion = prepPortion(recipe, people);
+          const existing = get().savedRecipes.find(item => item.externalId === portion.externalId);
+          const recipeId = existing?.id ?? await get().saveRecipe(portion, ctx);
+          for (const date of emptyDates) entries.push({date, meal, recipe_id: recipeId, recipe_name: portion.name});
+        }
+        if (entries.length) await operation(ctx, 'add-meal-plan-batch', { entries });
+        return entries.length;
       },
       addMealPlan: async (entry, ctx) => {
         const recipe = [...get().savedRecipes, ...get().recipes].find((r) => r.id === entry.recipeId);

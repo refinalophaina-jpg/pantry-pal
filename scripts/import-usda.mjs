@@ -43,8 +43,8 @@ export async function fetchFood(query, key, fetchImpl = fetch) {
   return payload.foods[0] ?? null;
 }
 export function toRow(query, food) {
-  if (!food.fdcId) throw new Error("FDC result has no food ID.");
-  return { slug: slugify(query), name: query.replace(/\b\w/g, match => match.toUpperCase()), category: categorize(food.foodCategory), source: "usda", source_id: String(food.fdcId), ...pickNutrients(food.foodNutrients) };
+  if (!food.fdcId || !food.description?.trim()) throw new Error("FDC result needs its food ID and exact description.");
+  return { slug: `fdc-${food.fdcId}`, name: food.description.trim(), category: categorize(food.foodCategory), source: "usda", source_id: String(food.fdcId), ...pickNutrients(food.foodNutrients) };
 }
 export async function main(argv = process.argv.slice(2)) {
   if (argv.includes("--help")) { console.log(`Import USDA FoodData Central into D1. Requires FDC_API_KEY.\n[food queries...] (default: common foods)\n${targetHelp}`); return; }

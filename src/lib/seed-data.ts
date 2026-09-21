@@ -1,3 +1,4 @@
+import { prepRecipes } from "./prep-recipes";
 import type {
   PantryItem,
   Recipe,
@@ -134,6 +135,7 @@ export const seedPantry: PantryItem[] = [
 //   FS = vegetarian (pineapple) fish sauce · MS = mushroom seasoning
 //   (both made in Vietnam, available at Hong Kong 4 supermarket).
 export const seedRecipes: Recipe[] = [
+  ...prepRecipes,
   // ───────────────────────── THAI ─────────────────────────
   {
     id: "r-basil-thai-spaghetti",

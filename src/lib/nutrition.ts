@@ -6,10 +6,11 @@
  * 2. Fall back to the Workers nutrition cache (shared across households).
  * 3. (Future) Fall back to USDA FoodData Central with API key.
  *
- * Values are expressed per 100 g (or per 100 ml for liquids; we treat them
- * the same since most ingredients are close to 1 g/ml at low precision).
+ * Values are per 100 g. Volume requires a known density; pieces require a
+ * known weight. Preparation states are never discarded.
  */
 
+import foodReference from "./food-reference.json";
 import type { Recipe, UnitType, Nutrition } from "./types";
 import { apiRequest } from "./api-client";
 import { lookupIngredientByName } from "./food-db";
@@ -17,6 +18,7 @@ import { lookupIngredientByName } from "./food-db";
 interface Per100 extends Nutrition {
   /** Treat per_unit as 'piece' rather than '100g' (e.g. for eggs). */
   perPiece?: boolean;
+  densityGPerMl?: number;
   /** Approximate grams per "1 pcs" — used when recipe quantity is in pcs. */
   gramsPerPiece?: number;
 }
@@ -82,23 +84,10 @@ const BUILTIN: Record<string, Per100> = {
   peas: { calories: 81, proteinG: 5.4, carbsG: 14, fiberG: 5.1 },
 };
 
-// Rough volume → mass conversions (g). Used when ingredient quantity is in
-// tsp/tbsp/cup but our nutrition data is per 100g.
-const VOLUME_TO_GRAMS_DEFAULT: Record<UnitType, number> = {
-  tsp: 5,
-  tbsp: 15,
-  cup: 240,
-  ml: 1,
-  l: 1000,
-  g: 1,
-  kg: 1000,
-  pcs: 100, // fallback when we don't know piece weight
-};
-
 function normalize(name: string): string {
   return name
     .toLowerCase()
-    .replace(/^(fresh|dried|chopped|sliced|minced|grated|raw|cooked)\s+/g, "")
+    .replace(/^(fresh|chopped|sliced|minced|grated)\s+/g, "")
     .replace(/\s+\(.*\)$/, "")
     .trim();
 }
@@ -123,9 +112,7 @@ function builtinLookup(name: string): Per100 | null {
   }
   // Singular → plural (a few table entries are stored only in plural form).
   if (BUILTIN[n + "s"]) return BUILTIN[n + "s"];
-  // Last-word match: "olive oil" -> "oil" if we have it
-  const last = n.split(" ").pop()!;
-  if (BUILTIN[last]) return BUILTIN[last];
+
   return null;
 }
 
@@ -166,6 +153,7 @@ async function dbIngredientLookup(name: string): Promise<Per100 | null> {
     fatG: ing.fatG,
     fiberG: ing.fiberG,
     gramsPerPiece: ing.gramsPerPiece,
+    densityGPerMl: ing.densityGPerMl,
     perPiece: ing.gramsPerPiece !== undefined,
   };
 }
@@ -175,28 +163,27 @@ async function dbIngredientLookup(name: string): Promise<Per100 | null> {
  * builtin (instant, offline) → canonical ingredients DB → shared cache.
  */
 export async function lookupNutrition(name: string): Promise<Per100 | null> {
-  return (
-    builtinLookup(name) ??
-    (await dbIngredientLookup(name)) ??
-    (await cacheLookup(name))
-  );
+  const normalized = normalize(name);
+  const exact = foodReference.find(food => food.name.toLowerCase() === normalized);
+  if (exact) return { calories: exact.calories!, proteinG: exact.proteinG ?? undefined, carbsG: exact.carbsG ?? undefined, fatG: exact.fatG ?? undefined, fiberG: exact.fiberG ?? undefined, ...(normalized === "olive oil" ? { densityGPerMl: 0.91 } : {}) };
+  // These foods change markedly with cooking or variety. Require an explicit state.
+  if (/^(rice|pasta|spaghetti|lentils|beans|black beans|chickpeas|chicken breast|ground beef|beef|shrimp|tuna|salmon|yogurt|cheese|pepper)$/.test(normalized)) return null;
+  return builtinLookup(name) ?? (await dbIngredientLookup(name)) ?? (await cacheLookup(name));
 }
 
-function toGrams(
-  quantity: number,
-  unit: UnitType,
-  per: Per100 | null,
-): number {
-  if (unit === "pcs") {
-    return quantity * (per?.gramsPerPiece ?? VOLUME_TO_GRAMS_DEFAULT.pcs);
-  }
-  return quantity * VOLUME_TO_GRAMS_DEFAULT[unit];
+function toGrams(quantity: number, unit: UnitType, per: Per100): number | null {
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
+  if (unit === "g" || unit === "kg") return quantity * (unit === "kg" ? 1000 : 1);
+  if (unit === "pcs") return per.gramsPerPiece ? quantity * per.gramsPerPiece : null;
+  const volume = { tsp: 5, tbsp: 15, cup: 240, ml: 1, l: 1000 }[unit];
+  return per.densityGPerMl ? quantity * volume * per.densityGPerMl : null;
 }
 
 export interface RecipeNutrition extends Nutrition {
   knownIngredients: number;
   totalIngredients: number;
   perServing: Nutrition;
+  missingIngredients: string[];
 }
 
 export async function estimateRecipeNutrition(
@@ -211,14 +198,17 @@ export async function estimateRecipeNutrition(
   const required = recipe.ingredients.filter((i) => !i.optional);
   // Look ingredients up in parallel; a failed/missing lookup just contributes
   // nothing rather than rejecting the whole estimate.
-  const pers = await Promise.all(
-    required.map((ing) => lookupNutrition(ing.name).catch(() => null)),
-  );
+  const pers: (Per100 | null)[] = [];
+  // Bound concurrency; opening a long recipe must not burst dozens of requests.
+  for (let offset = 0; offset < required.length; offset += 4) {
+    pers.push(...await Promise.all(required.slice(offset, offset + 4).map(ing => lookupNutrition(ing.name).catch(() => null))));
+  }
+  const missingIngredients: string[] = [];
   required.forEach((ing, idx) => {
     const per = pers[idx];
-    if (!per) return;
+    const grams = per ? toGrams(ing.quantity, ing.unit, per) : null;
+    if (!per || grams === null) { missingIngredients.push(ing.name); return; }
     known++;
-    const grams = toGrams(ing.quantity, ing.unit, per);
     const factor = grams / 100;
     cal += per.calories * factor;
     if (per.proteinG) prot += per.proteinG * factor;
@@ -234,6 +224,7 @@ export async function estimateRecipeNutrition(
     fatG: Math.round(fat),
     fiberG: Math.round(fib),
     knownIngredients: known,
+    missingIngredients,
     totalIngredients: recipe.ingredients.filter((i) => !i.optional).length,
     perServing: {
       calories: Math.round(cal / servings),

@@ -45,7 +45,7 @@ test("mobile navigation and native dialogs remain usable at narrow and tablet si
   await more.click();
   const dialog = page.getByRole("dialog", { name: "More and account" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("navigation", { name: "More destinations" }).getByRole("link")).toHaveCount(4);
+  await expect(dialog.getByRole("navigation", { name: "More destinations" }).getByRole("link")).toHaveCount(5);
   await expect(dialog.getByRole("button", { name: "Invite partner" })).toBeVisible();
   const close = dialog.getByRole("button", { name: "Close More and account" });
   await close.focus();
@@ -211,4 +211,59 @@ test("a remembered guest pantry can be recovered in a fresh browser with a repla
     await Promise.all(recoveredContext.pages().map(page => page.goto("about:blank", { timeout: 3_000 }).catch(() => {})));
     await recoveredContext.close();
   }
+});
+
+test('three-day prep scales shopping, preserves slots, and opens useful meal details', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/prep/');
+  await expect(page.getByRole('heading',{name:'Three-day prep',exact:true})).toBeVisible();
+  if (process.env.PANTRY_CAPTURE_CONTENT === '1') {
+    await page.screenshot({path:'/private/tmp/pantry-prep-mobile.png',fullPage:true,animations:'disabled',scale:'css'});
+    await page.setViewportSize({width:1440,height:1000});
+    await page.screenshot({path:'/private/tmp/pantry-prep-desktop.png',fullPage:true,animations:'disabled',scale:'css'});
+    await page.setViewportSize({width:390,height:844});
+  }
+  await page.getByLabel('First day of this batch').fill('2027-03-15');
+  await page.getByLabel('People per meal').selectOption('2');
+  await page.getByRole('button').filter({hasText:'Indian-inspired lentil & spinach dal'}).click();
+  const batchDetail=page.getByRole('dialog',{name:'Indian-inspired lentil & spinach dal',exact:true});
+  await expect(batchDetail.getByRole('listitem').filter({hasText:'Dry lentils'}).getByText('480 g',{exact:true})).toBeVisible();
+  await expect(batchDetail.getByText(/Full three-day batch: 6 portions for 2 people/)).toBeVisible();
+  await batchDetail.getByRole('button',{name:'Close',exact:true}).click();
+  await page.getByRole('button',{name:'Plan three days',exact:true}).first().click();
+  await expect(page.getByText('6 meals added. Open Meal Plan to review, then shop these dates.',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Plan three days',exact:true}).first().click();
+  await expect(page.getByText(/These lunch and dinner slots already have meals/)).toBeVisible();
+  const snapshot = async () => (await (await page.request.get(`/api/households/${fixture().householdId}/snapshot`)).json());
+  let data = await snapshot();
+  expect(data.meal_plan.filter((e:{date:string})=>e.date.startsWith('2027-03-1'))).toHaveLength(6);
+  await page.getByRole('button',{name:'Shop selected three days'}).click();
+  await expect(page.getByText(/missing ingredients added for the selected three days/)).toBeVisible();
+  data = await snapshot();
+  // Original recipe: 600g tofu for three portions. Two people × three days = 1200g.
+  expect(data.shopping_items.find((i:{name:string})=>i.name==='Firm tofu')).toMatchObject({quantity:1200,unit:'g',category:'Fresh · this prep'});
+  expect(data.shopping_items.find((i:{name:string})=>i.name==='Dry lentils')).toMatchObject({quantity:480,unit:'g',category:'Cupboard · check stock'});
+  // Both dishes use garlic. It must be aggregated before subtracting existing stock.
+  expect(data.shopping_items.find((i:{name:string})=>i.name==='Raw garlic')).toMatchObject({quantity:48,unit:'g'});
+  await page.getByRole('button',{name:'Shop selected three days'}).click();
+  await expect(page.getByText(/No missing ingredients to add/)).toBeVisible();
+  expect((await snapshot()).shopping_items.filter((i:{name:string})=>i.name==='Firm tofu')).toHaveLength(1);
+  // Put one of these saved recipes in the current week to exercise calendar detail actions.
+  const saved=data.saved_recipes.find((r:{external_id:string})=>r.external_id==='prep-thai-basil-tofu-2p');
+  const today = new Date().toLocaleDateString('en-CA');
+  const added=await page.request.post(`/api/households/${fixture().householdId}/meal-plan`,{headers:{Origin:new URL(page.url()).origin},data:{date:today,meal:'dinner',recipe_id:`saved-${saved.id}`,recipe_name:saved.name}});
+  expect(added.ok()).toBe(true);
+  await page.goto('/meal-plan/');
+  await page.getByRole('button',{name:`Open recipe: ${saved.name}`,exact:true}).click();
+  const detail=page.getByRole('dialog',{name:saved.name,exact:true});
+  await expect(detail).toBeVisible();
+  await expect(detail.getByRole('button',{name:'Add missing to list'})).toBeVisible();
+  await expect(detail.getByRole('button',{name:'Cook now'})).toBeVisible();
+  await detail.getByRole('link',{name:'Open shopping list'}).click();
+  await expect(page.getByRole('heading',{name:'Shopping list',exact:true})).toBeVisible();
+  await page.goto('/food-guide/');
+  await page.getByLabel('Search food references').fill('lentils');
+  await expect(page.getByRole('heading',{name:'Dry lentils',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Cooked lentils',exact:true})).toBeVisible();
+  for (const width of [320,390,820,1440]) { await page.setViewportSize({width,height:900}); expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false); }
 });

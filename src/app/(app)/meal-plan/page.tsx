@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Sparkles, X } from "lucide-react";
+import { Plus, Sparkles, X, ShoppingCart, Bookmark, BookmarkCheck, ArrowUpRight } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import {
@@ -19,16 +19,38 @@ import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/toast";
 import { format, startOfWeek, addDays, parseISO } from "date-fns";
 
+import Link from "next/link";
+import { FoodVisual } from "@/components/food-visual";
+import { RecipeDetail } from "@/components/recipe-detail";
+import { CookMode } from "@/components/cook-mode";
+import type { Recipe } from "@/lib/types";
+
 const MEALS = ["breakfast", "lunch", "dinner", "snack"] as const;
 
 export default function MealPlanPage() {
+  const identity = useAppStore((s) => s._identity);
+  return <MealPlanContent key={identity} />;
+}
+
+function MealPlanContent() {
   const recipes = useAppStore((s) => s.recipes);
   const savedRecipes = useAppStore((s) => s.savedRecipes);
   const mealPlan = useAppStore((s) => s.mealPlan);
-  const { addMealPlan, removeMealPlan, moveMealPlan, generateMealPlan } =
+  const { addMealPlan, removeMealPlan, moveMealPlan, generateMealPlan, saveRecipe, generateFromRecipe, buildWeekList } =
     useSyncedActions();
   const run = useAction();
   const { toast } = useToast();
+
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [cooking, setCooking] = useState<Recipe | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const allRecipes = useMemo(() => Array.from(new Map([...recipes, ...savedRecipes].map(r => [r.id, r])).values()), [recipes, savedRecipes]);
+  const isFavorite = (recipe: Recipe) => savedRecipes.some(r => r.id === recipe.id || (recipe.externalId && r.externalId === recipe.externalId) || r.name.toLowerCase() === recipe.name.toLowerCase());
+  async function mealAction(action: () => Promise<unknown>, success: string) {
+    if (actionBusy) return;
+    setActionBusy(true);
+    try { await run(action, { success }); } finally { setActionBusy(false); }
+  }
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [addContext, setAddContext] = useState<
@@ -57,8 +79,8 @@ export default function MealPlanPage() {
   // AI generator state
   const [genOpen, setGenOpen] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
-  const [prefs, setPrefs] = useState("");
-  const [genDays, setGenDays] = useState(7);
+  const [prefs, setPrefs] = useState("Minimize waste; reuse ingredients across three days. Prefer Thai, Nigerian, Indian and Vietnamese vegetarian-friendly meals. Use pantry items first.");
+  const [genDays, setGenDays] = useState(3);
   const [genMeals, setGenMeals] = useState<string[]>(["dinner"]);
   const recipeCount = recipes.length + savedRecipes.length;
 
@@ -121,7 +143,7 @@ export default function MealPlanPage() {
     <div>
       <PageHeader
         title="Meal plan"
-        subtitle="Generate a week with AI, or build it yourself — drag meals between slots to rearrange."
+        subtitle="Tap a meal to see its recipe, adjust servings, or start cooking. Drag meals to rearrange."
         actions={
           <div className="flex gap-2 flex-wrap">
             <Button size="sm" onClick={() => setGenOpen(true)} disabled={!mounted}>
@@ -153,6 +175,14 @@ export default function MealPlanPage() {
         }
       />
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Button variant="secondary" disabled={actionBusy || !mealPlan.some(entry => days.some(day => day.date === entry.date))} onClick={() => void mealAction(() => buildWeekList(days.map(day => day.date)), "This week’s missing ingredients added to Shopping.")}>
+          <ShoppingCart className="size-4" /> {actionBusy ? "Saving…" : "Shop this week"}
+        </Button>
+        <Link href="/prep/" className="min-h-11 inline-flex items-center gap-1 underline">Three-day prep plans</Link>
+            <Link href="/shopping/" className="min-h-11 inline-flex items-center gap-1 text-sm text-[var(--accent-hover)] underline underline-offset-4">Open shopping list <ArrowUpRight className="size-4" /></Link>
+        <Link href="/recipes/" className="min-h-11 inline-flex items-center gap-1 text-sm text-[var(--text-muted)] underline underline-offset-4">My recipes <ArrowUpRight className="size-4" /></Link>
+      </div>
       <Card className="overflow-x-auto p-0">
         {!mounted ? (
           <div className="min-w-[800px] p-3 space-y-2">
@@ -192,7 +222,12 @@ export default function MealPlanPage() {
                   error: "Couldn't remove the meal — try again.",
                 })
               }
-              recipes={recipes}
+              recipes={allRecipes}
+              onOpen={setSelectedRecipe}
+              isFavorite={isFavorite}
+              actionBusy={actionBusy}
+              onFavorite={(recipe) => void mealAction(() => saveRecipe(recipe), "Favorited — find it in My Recipes.")}
+              onShop={(recipe) => void mealAction(() => generateFromRecipe(recipe, recipe.servings), "Missing ingredients added to Shopping.")}
               dragId={dragId}
               overKey={overKey}
               onDragStartEntry={setDragId}
@@ -217,6 +252,9 @@ export default function MealPlanPage() {
           />
         </div>
       )}
+
+      {selectedRecipe && <RecipeDetail key={selectedRecipe.id} recipe={selectedRecipe} onClose={() => setSelectedRecipe(null)} onCook={(recipe) => { setSelectedRecipe(null); setCooking(recipe); }} />}
+      {cooking && <CookMode key={cooking.id} recipe={cooking} onClose={() => setCooking(null)} />}
 
       <Modal
         open={addContext !== null}
@@ -332,6 +370,7 @@ function Row({
   mealPlan,
   onAdd,
   onRemove,
+  onOpen, onFavorite, onShop, isFavorite, actionBusy,
   recipes,
   dragId,
   overKey,
@@ -343,6 +382,11 @@ function Row({
   meal: (typeof MEALS)[number];
   days: { date: string; label: string; short: string }[];
   mealPlan: ReturnType<typeof useAppStore.getState>["mealPlan"];
+  onOpen: (recipe: Recipe) => void;
+  onFavorite: (recipe: Recipe) => void;
+  onShop: (recipe: Recipe) => void;
+  isFavorite: (recipe: Recipe) => boolean;
+  actionBusy: boolean;
   onAdd: (date: string) => void;
   onRemove: (id: string) => void;
   recipes: ReturnType<typeof useAppStore.getState>["recipes"];
@@ -388,7 +432,7 @@ function Row({
           >
             {entries.map((e) => {
               const recipe = recipes.find((r) => r.id === e.recipeId);
-              if (!recipe) return null;
+              if (!recipe) return <div key={e.id} className="text-xs p-2">Recipe unavailable<Button variant="ghost" onClick={() => onRemove(e.id)}>Remove meal</Button></div>;
               return (
                 <div
                   key={e.id}
@@ -399,24 +443,32 @@ function Row({
                     onDragStartEntry(e.id);
                   }}
                   onDragEnd={onDragEndEntry}
-                  className={`text-xs rounded-md bg-[var(--accent-soft)] text-[var(--accent-hover)] px-2 py-1 flex items-start justify-between gap-1 group cursor-grab active:cursor-grabbing ${
+                  className={`text-xs rounded-md bg-[var(--accent-soft)] text-[var(--accent-hover)] p-2 group cursor-grab active:cursor-grabbing ${
                     dragId === e.id ? "opacity-40" : ""
                   }`}
                 >
-                  <span className="leading-tight">{recipe.name}</span>
+                  <button type="button" onClick={(event) => { event.currentTarget.focus(); onOpen(recipe); }} className="min-h-11 w-full text-left leading-snug font-medium hover:underline focus-visible:outline-2 rounded" aria-label={`Open recipe: ${recipe.name}`}>
+                    <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} compact />
+                    {recipe.name}
+                    <span className="block mt-1 text-[10px] font-normal text-[var(--text-muted)]">{recipe.minutes} min · {recipe.servings} servings</span>
+                  </button>
+                  <div className="flex items-center justify-between border-t border-[var(--border)] mt-1">
+                    <button type="button" disabled={actionBusy} onClick={() => onShop(recipe)} aria-label={`Add ingredients for ${recipe.name} to shopping list`} title="Add missing ingredients" className="size-11 grid place-items-center rounded hover:bg-[var(--surface)] disabled:opacity-50"><ShoppingCart className="size-4" /></button>
+                    <button type="button" disabled={actionBusy || isFavorite(recipe)} onClick={() => onFavorite(recipe)} aria-label={`${isFavorite(recipe) ? "Favorited" : "Favorite"}: ${recipe.name}`} aria-pressed={isFavorite(recipe)} title={isFavorite(recipe) ? "Saved in My Recipes" : "Favorite in My Recipes"} className="size-11 grid place-items-center rounded hover:bg-[var(--surface)] disabled:opacity-60">{isFavorite(recipe) ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}</button>
                   <button
                     onClick={() => onRemove(e.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    aria-label="Remove"
+                    className="size-11 grid place-items-center rounded hover:bg-[var(--surface)]"
+                    aria-label={`Remove ${recipe.name} from plan`}
                   >
                     <X className="size-3" />
                   </button>
+                  </div>
                 </div>
               );
             })}
             <button
               onClick={() => onAdd(d.date)}
-              className="mt-auto text-xs text-[var(--text-muted)] hover:text-[var(--accent-hover)] flex items-center justify-center gap-1 py-1 rounded-md hover:bg-[var(--bg)]"
+              className="mt-auto text-xs text-[var(--text-muted)] hover:text-[var(--accent-hover)] flex items-center justify-center gap-1 min-h-11 py-1 rounded-md hover:bg-[var(--bg)]"
             >
               <Plus className="size-3" /> Add
             </button>
@@ -428,7 +480,9 @@ function Row({
 }
 
 function PickRecipe({ onPick }: { onPick: (id: string) => void }) {
-  const recipes = useAppStore((s) => s.recipes);
+  const builtins = useAppStore((s) => s.recipes);
+  const saved = useAppStore((s) => s.savedRecipes);
+  const recipes = useMemo(() => Array.from(new Map([...builtins, ...saved].map(r => [r.id, r])).values()), [builtins, saved]);
   const [selected, setSelected] = useState(recipes[0]?.id ?? "");
 
   if (recipes.length === 0) {

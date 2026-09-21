@@ -150,3 +150,7 @@ Performance checks start with repeatable measured traces under a recorded device
 Every later phase updates its row with the implementation commit, checks, deployed identity (if any), remaining limits, and next action. The implementation release is 0.10.0; native metadata is aligned without claiming a native release.
 
 Release evidence: [2026-09-21 Cloudflare migration](verification/2026-09-21-cloudflare-migration.md).
+
+## 10. Low-waste content follow-through
+
+Implemented three-day household prep planning, actionable calendar meals, six vegetarian-friendly cuisine adaptations, 32 source-linked USDA references, and honest nutrition coverage. Reference migrations 0005/0006 are additive; preserve all current guest and account data. [Content scope and verification](verification/2026-09-21-prep-content.md) records behavior, provenance, tests, performance boundaries and deployment evidence.

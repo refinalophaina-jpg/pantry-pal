@@ -4,7 +4,7 @@ import { seedRecipes } from './seed-data';
 import type { Recipe } from './types';
 
 // Area names supported by TheMealDB's V1 area list. Local recipes also match here.
-export const EXPLORE_CUISINES = ['Vietnamese', 'Thai', 'Indian', 'Chinese', 'Italian', 'French', 'Japanese', 'Mexican', 'Greek', 'Moroccan', 'British', 'American'];
+export const EXPLORE_CUISINES = ['Vietnamese', 'Thai', 'Nigerian', 'Indian', 'Chinese', 'Italian', 'French', 'Japanese', 'Mexican', 'Greek', 'Moroccan', 'British', 'American'];
 export type ExploreView = 'discover' | 'kitchen' | 'world' | string;
 export interface ExploreResult { recipes: Recipe[]; notice?: string }
 
@@ -47,7 +47,7 @@ async function worldCuisine(area: string): Promise<ExploreResult> {
 }
 
 /** Discover and Our Kitchen work entirely from D1 plus the bundled collection. */
-export async function loadExploreRecipes(view: ExploreView, query = ''): Promise<ExploreResult> {
+async function fetchExploreRecipes(view: ExploreView, query = ''): Promise<ExploreResult> {
   const cuisine = !query && EXPLORE_CUISINES.includes(view) ? view : undefined;
   const local = searchRecipeCatalog(query, 100);
   const useWorld = Boolean(query || view === 'world' || cuisine);
@@ -75,4 +75,25 @@ export function shuffledRecipes(recipes: Recipe[]) {
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
+}
+
+// Only public reference content is cached; never household recipes or pantry data.
+const exploreCache = new Map<string, { expires: number; value: ExploreResult }>();
+const inFlight = new Map<string, Promise<ExploreResult>>();
+export function clearExploreCache() { exploreCache.clear(); inFlight.clear(); }
+export async function loadExploreRecipes(view: ExploreView, query = ''): Promise<ExploreResult> {
+  const key = JSON.stringify([view, query.trim()]);
+  const cached = exploreCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.value;
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+  const request = fetchExploreRecipes(view, query.trim()).then(value => {
+    if (!value.notice) {
+      if (exploreCache.size >= 24) exploreCache.delete(exploreCache.keys().next().value!);
+      exploreCache.set(key, { expires: Date.now() + 300_000, value });
+    }
+    return value;
+  }).finally(() => inFlight.delete(key));
+  inFlight.set(key, request);
+  return request;
 }

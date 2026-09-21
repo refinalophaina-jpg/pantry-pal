@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import { FoodVisual } from "@/components/food-visual";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -214,7 +216,7 @@ export default function PantryPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="font-medium">{item.name}</div>
+                    <div className="flex items-center gap-2"><FoodVisual name={item.name} compact /><div className="font-medium">{item.name}</div></div>
                     <div className="text-xs text-[var(--text-muted)]">
                       {item.category} · {item.zone}
                     </div>

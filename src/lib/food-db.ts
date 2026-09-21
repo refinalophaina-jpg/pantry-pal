@@ -60,7 +60,7 @@ export interface Technique {
 
 // snake_case → undefined-safe number
 function num(v: unknown): number | undefined {
-  return v === null || v === undefined ? undefined : Number(v);
+  return v === null || v === undefined || !Number.isFinite(Number(v)) || Number(v) < 0 ? undefined : Number(v);
 }
 
 export function ingredientFromRow(row: Record<string, unknown>): Ingredient {

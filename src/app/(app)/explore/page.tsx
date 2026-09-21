@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
+import { FoodVisual } from "@/components/food-visual";
+import Link from "next/link";
 import { Search, Shuffle, Globe2, ChefHat } from "lucide-react";
 import { bundledExploreRecipes, EXPLORE_CUISINES, loadExploreRecipes, shuffledRecipes } from "@/lib/explore-recipes";
 import type { Recipe } from "@/lib/types";
@@ -11,6 +12,7 @@ import { RecipeDetail } from "@/components/recipe-detail";
 import { CookMode } from "@/components/cook-mode";
 
 export default function ExplorePage() {
+  const [visible, setVisible] = useState(24);
   const [selection, setSelection] = useState({ view: "discover", term: "", refresh: 0 });
   const [cards, setCards] = useState<Recipe[]>(() => bundledExploreRecipes());
   const [loading, setLoading] = useState(false);
@@ -21,6 +23,7 @@ export default function ExplorePage() {
 
   useEffect(() => {
     let cancelled = false;
+    setVisible(24);
     setLoading(true);
     setNotice(undefined);
     setCards(bundledExploreRecipes(selection.view, selection.term));
@@ -62,6 +65,7 @@ export default function ExplorePage() {
         }
       />
 
+      <nav className="flex flex-wrap gap-4 mb-4 text-sm underline"><Link className="min-h-11 inline-flex items-center" href="/prep/">Low-waste three-day prep</Link><Link className="min-h-11 inline-flex items-center" href="/food-guide/">Food & nutrition guide</Link></nav>
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="relative flex-1">
           <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -131,12 +135,13 @@ export default function ExplorePage() {
         </Card>
       ) : (
         <Grid>
-          {cards.map((r) => (
+          {cards.slice(0, visible).map((r) => (
             <RecipeCard key={r.id} recipe={r} onClick={() => setOpen(r)} />
           ))}
         </Grid>
       )}
 
+      {cards.length > visible && <Button className="mt-5" variant="secondary" onClick={() => setVisible(n => n + 24)}>Show 24 more recipes</Button>}
       {open && <RecipeDetail key={open.id} recipe={open} onClose={() => setOpen(null)} onCook={recipe => { setOpen(null); setCooking(recipe); }} />}
       {cooking && <CookMode recipe={cooking} onClose={() => setCooking(null)} />}
     </div>
@@ -187,22 +192,7 @@ function RecipeCard({
       onClick={onClick}
       className="text-left group rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden hover:border-[var(--accent)] transition-colors cursor-pointer"
     >
-      <div className="relative aspect-square overflow-hidden bg-[var(--bg)]">
-        {recipe.imageUrl ? (
-          <Image
-            src={recipe.imageUrl}
-            alt={recipe.name}
-            fill
-            sizes="(max-width: 640px) 50vw, 25vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
-            unoptimized
-          />
-        ) : (
-          <div className="grid place-items-center h-full text-[var(--text-muted)]">
-            <Globe2 className="size-8" />
-          </div>
-        )}
-      </div>
+      <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} />
       <div className="p-3">
         <div className="font-medium text-sm line-clamp-2 group-hover:text-[var(--accent-hover)]">
           {recipe.name}

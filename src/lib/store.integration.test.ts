@@ -124,3 +124,21 @@ describe("Workers-backed household actions", () => {
   });
 
 });
+
+it('plans only empty prep slots and reuses the correct household portion recipes', async () => {
+  const lunch = {...recipe, id:'saved-lunch',externalId:'prep-a-2p',name:'Lunch',servings:2};
+  const dinner = {...recipe,id:'saved-dinner',externalId:'prep-b-2p',name:'Dinner',servings:2};
+  useAppStore.setState({ savedRecipes:[lunch,dinner], mealPlan:[{id:'existing',date:'2026-12-31',meal:'lunch',recipeId:'other'}] });
+  fetchMock.mockResolvedValueOnce(json({ok:true})).mockResolvedValueOnce(json(empty));
+  const count=await useAppStore.getState().planPrep([{...recipe,id:'prep-a'},{...recipe,id:'prep-b'}],'2026-12-31',2,ctx);
+  expect(count).toBe(5);
+  const body=requestBody();
+  expect(body.type).toBe('add-meal-plan-batch');
+  expect(body.entries.filter((e:{meal:string})=>e.meal==='lunch')).toHaveLength(2);
+  expect(body.entries.every((e:{recipe_id:string})=>['saved-lunch','saved-dinner'].includes(e.recipe_id))).toBe(true);
+});
+it('matches explicit raw produce without confusing dry and cooked food',()=>{
+  const items=[{name:'Garlic',quantity:12,unit:'g' as const},{name:'Cooked lentils',quantity:100,unit:'g' as const}];
+  expect(availableQuantity(items,'Raw garlic','g')).toBe(12);
+  expect(availableQuantity(items,'Dry lentils','g')).toBe(0);
+});

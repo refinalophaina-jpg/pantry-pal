@@ -109,6 +109,30 @@ export async function main(argv = process.argv.slice(2)) {
         await itemCheckbox(page).waitFor({ state: 'visible' });
         check((await session(context))?.user?.id === userId, 'reload remembers the same guest');
 
+        step = 'three-day prep and food references';
+        await page.goto('/prep/');
+        await page.getByLabel('First day of this batch').fill('2030-01-07');
+        await page.getByLabel('People per meal').selectOption('2');
+        await page.getByRole('button', { name: 'Plan three days', exact: true }).first().click();
+        await page.getByText('6 meals added. Open Meal Plan to review, then shop these dates.', { exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Shop selected three days', exact: true }).click();
+        await page.getByText(/missing ingredients added for the selected three days/).waitFor();
+        const prepSnapshot = await readJson(await context.request.get(`/api/households/${householdId}/snapshot`));
+        check(prepSnapshot.meal_plan.length === 6, 'three-day prep creates six meal entries');
+        check(prepSnapshot.shopping_items.find(item => item.name === 'Firm tofu')?.quantity === 1200, 'household batch shopping scales to six portions');
+        check(prepSnapshot.shopping_items.find(item => item.name === 'Raw garlic')?.quantity === 48, 'shared ingredients aggregate across recipes');
+        check(prepSnapshot.shopping_items.find(item => item.name === 'Dry lentils')?.category === 'Cupboard · check stock', 'shopping distinguishes cupboard staples');
+        await page.getByRole('button', { name: 'Plan three days', exact: true }).first().click();
+        await page.getByText(/These lunch and dinner slots already have meals/).waitFor();
+        check((await readJson(await context.request.get(`/api/households/${householdId}/snapshot`))).meal_plan.length === 6, 'repeat planning preserves existing meals');
+        await page.goto('/food-guide/');
+        await page.getByLabel('Search food references').fill('lentils');
+        check(await page.getByRole('heading', { name: 'Dry lentils', exact: true }).isVisible(), 'dry food reference is available');
+        check(await page.getByRole('heading', { name: 'Cooked lentils', exact: true }).isVisible(), 'cooked food has its own reference');
+        const refs = await readJson(await context.request.get('/api/catalog/ingredients?name=Dry%20lentils'));
+        check(refs.data?.source_id === '172420', 'live D1 contains verified USDA record');
+        await openShopping(page);
+
         step = 'recovery code creation';
         await mobileNav(page).getByRole('button', { name: 'More', exact: true }).click();
         await page.getByRole('dialog', { name: 'More and account', exact: true }).getByRole('button', { name: 'Guest recovery code', exact: true }).click();
@@ -154,7 +178,7 @@ export async function main(argv = process.argv.slice(2)) {
           const stored = JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]);
           return !stored.includes(oldCode) && !stored.includes(newCode);
         }, [code, replacement]), 'recovery credentials are absent from browser web storage');
-        console.log(`Live guest UI smoke passed: ${checks} checks on ${target.environment} (guest, persistent cookie, reload, shopping, recovery, revocation).`);
+        console.log(`Live guest UI smoke passed: ${checks} checks on ${target.environment} (guest, prep quantities, food references, shopping, recovery, revocation).`);
       } finally {
         await browser?.close().catch(() => {});
         if (userIds.size) {

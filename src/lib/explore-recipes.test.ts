@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bundledExploreRecipes, loadExploreRecipes } from './explore-recipes';
+import { bundledExploreRecipes, loadExploreRecipes, clearExploreCache } from './explore-recipes';
 import type { Recipe } from './types';
 
 const mocks = vi.hoisted(() => ({ catalog: vi.fn(), filter: vi.fn(), lookup: vi.fn(), random: vi.fn(), search: vi.fn() }));
 vi.mock('./food-db', () => ({ searchRecipeCatalog: mocks.catalog }));
 vi.mock('./mealdb', () => ({ filterByArea: mocks.filter, lookupMeal: mocks.lookup, randomMeals: mocks.random, searchByName: mocks.search }));
 const recipe = (id: string, name = id, cuisine = 'Italian'): Recipe => ({ id, name, cuisine, description: '', minutes: 20, difficulty: 'easy', servings: 2, equipment: [], ingredients: [{ name: 'Rice', quantity: 0.5, unit: 'cup' }], steps: ['Cook the rice.'], tags: [] });
-beforeEach(() => { vi.resetAllMocks(); mocks.catalog.mockResolvedValue([]); mocks.random.mockResolvedValue([]); mocks.search.mockResolvedValue([]); });
+beforeEach(() => { clearExploreCache(); vi.resetAllMocks(); mocks.catalog.mockResolvedValue([]); mocks.random.mockResolvedValue([]); mocks.search.mockResolvedValue([]); });
 
 describe('zero-secret Explore sources', () => {
   it('loads Discover from D1 and bundled recipes without a world or paid-provider call', async () => {
@@ -59,4 +59,11 @@ describe('zero-secret Explore sources', () => {
     expect(result.recipes.find(item => item.id === 'cat-rice')!.source).toBeUndefined();
     expect(result.recipes.some(item => item.id === 'mealdb-13')).toBe(true);
   });
+});
+
+it('reuses bounded public catalog results between page visits', async () => {
+  const first = await loadExploreRecipes('kitchen');
+  const second = await loadExploreRecipes('kitchen');
+  expect(second).toBe(first);
+  expect(mocks.catalog).toHaveBeenCalledTimes(1);
 });

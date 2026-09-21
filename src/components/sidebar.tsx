@@ -32,6 +32,7 @@ const nav = [
   { href: "/recipes", label: "My Recipes", icon: ChefHat },
   { href: "/explore", label: "Explore", icon: Globe2 },
   { href: "/learn", label: "Learn", icon: GraduationCap },
+  { href: "/prep", label: "Three-day Prep", icon: ChefHat },
   { href: "/meal-plan", label: "Meal Plan", icon: CalendarDays },
   { href: "/shopping", label: "Shopping", icon: ShoppingCart },
   { href: "/analytics", label: "Analytics", icon: TrendingUp },
@@ -235,7 +236,7 @@ export function MobileNav() {
   const [more, setMore] = useState(false);
   const [invite, setInvite] = useState(false);
   const [recovery, setRecovery] = useState(false);
-  const primary = [nav[0], nav[1], nav[2], nav[6]];
+  const primary = ["/", "/pantry", "/recipes", "/shopping"].map(href => nav.find(item => item.href === href)!);
   const secondary = nav.filter((item) => !primary.includes(item));
   const overflowActive = secondary.some((item) => pathname.startsWith(item.href));
   function search() {

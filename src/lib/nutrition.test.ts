@@ -36,7 +36,7 @@ function recipe(partial: Partial<Recipe>): Recipe {
 
 describe("lookupNutrition", () => {
   it("finds a builtin ingredient by exact name", async () => {
-    const rice = await lookupNutrition("rice");
+    const rice = await lookupNutrition("Cooked white long-grain rice");
     expect(rice?.calories).toBe(130);
   });
 
@@ -46,9 +46,8 @@ describe("lookupNutrition", () => {
     expect((await lookupNutrition("tomatoes"))?.perPiece).toBe(true);
   });
 
-  it("falls back to last-word match for compound names", async () => {
-    // "sunflower oil" -> "oil"
-    expect((await lookupNutrition("sunflower oil"))?.calories).toBe(884);
+  it("does not guess a compound food from its final word", async () => {
+    expect(await lookupNutrition("mystery oil")).toBeNull();
   });
 
   it("returns null for unknown ingredients (no cache hit)", async () => {
@@ -78,7 +77,7 @@ describe("lookupNutrition", () => {
   });
 
   it("prefers the builtin table over the DB (no DB call for builtin hits)", async () => {
-    const per = await lookupNutrition("rice");
+    const per = await lookupNutrition("Cooked white long-grain rice");
     expect(per?.calories).toBe(130);
     expect(mockedDbLookup).not.toHaveBeenCalled();
   });
@@ -90,15 +89,15 @@ describe("estimateRecipeNutrition", () => {
       recipe({
         servings: 2,
         ingredients: [
-          { name: "rice", quantity: 200, unit: "g" }, // 130*2 = 260 cal
+          { name: "Cooked white long-grain rice", quantity: 200, unit: "g" }, // 130*2 = 260 cal
           { name: "olive oil", quantity: 1, unit: "tbsp" }, // 884*0.15 = 132.6 cal
         ],
       }),
     );
     expect(n.knownIngredients).toBe(2);
     expect(n.totalIngredients).toBe(2);
-    expect(n.calories).toBe(393); // round(392.6)
-    expect(n.perServing.calories).toBe(196); // round(392.6/2)
+    expect(n.calories).toBe(381); // round(392.6)
+    expect(n.perServing.calories).toBe(190); // round(392.6/2)
   });
 
   it("ignores optional ingredients and unknown ones", async () => {
@@ -106,7 +105,7 @@ describe("estimateRecipeNutrition", () => {
       recipe({
         servings: 1,
         ingredients: [
-          { name: "rice", quantity: 100, unit: "g" }, // 130 cal
+          { name: "Cooked white long-grain rice", quantity: 100, unit: "g" }, // 130 cal
           { name: "saffron threads", quantity: 1, unit: "pcs" }, // unknown -> 0
           { name: "garnish", quantity: 1, unit: "pcs", optional: true }, // skipped
         ],
@@ -126,4 +125,17 @@ describe("estimateRecipeNutrition", () => {
     );
     expect(n.calories).toBe(155);
   });
+});
+
+it("keeps raw and cooked foods distinct and skips unweighed portions", async () => {
+  expect(await lookupNutrition("rice")).toBeNull();
+  expect((await lookupNutrition("Dry lentils"))?.calories).not.toBe((await lookupNutrition("Cooked lentils"))?.calories);
+  const result = await estimateRecipeNutrition(recipe({ ingredients: [{name: "Dry oats",quantity: 1,unit: "cup"}, {name: "Raw spinach",quantity: 1,unit: "pcs"}] }));
+  expect(result.knownIngredients).toBe(0);
+  expect(result.missingIngredients).toEqual(["Dry oats", "Raw spinach"]);
+});
+it("uses an ingredient-specific density from the database", async () => {
+  mockedDbLookup.mockResolvedValueOnce({id:"x",slug:"syrup-x",name:"Syrup x",category:"Other",aliases:[],source:"curated",calories:100,densityGPerMl:1.3});
+  const result=await estimateRecipeNutrition(recipe({servings:1,ingredients:[{name:"Syrup x",quantity:10,unit:"ml"}]}));
+  expect(result.calories).toBe(13);
 });

@@ -206,9 +206,9 @@ deployment IDs, exact test counts, rollback boundary and remaining checks are in
 
 The deployed guest journey, remembered cookie, shopping writes, fresh-browser
 recovery, replacement code and old-session revocation passed on staging and
-production. Both AI providers passed live staging calls. Email sender DNS is ready
-and a test message was queued; inbox delivery and emailed-link lifecycle still
-need real recipient confirmation. Physical-device and native-distribution gates
+production. Both AI providers passed live staging calls. Email sender DNS is ready,
+and on 2026-09-21 the owner confirmed on the production domain that the sign-up
+verification email arrived and a password-reset link was delivered and worked. Physical-device and native-distribution gates
 remain separate from the web cutover.
 
 The production cron is hourly at minute 17 UTC. Each run refreshes a bounded batch

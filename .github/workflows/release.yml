@@ -1,0 +1,112 @@
+name: Release tag
+
+# Marks a release the way the estate reads it: an annotated `v<version>` tag plus a
+# GitHub Release whose notes are that version's CHANGELOG section. It never builds or
+# deploys (Deploy does that). It refuses a version that differs from package.json at the
+# tagged commit, a commit that is not on `main`, and a tag that already points elsewhere,
+# so a release tag is created once and never moved.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag, exactly as in package.json (e.g. 0.10.0)"
+        required: true
+      commit:
+        description: "Commit to tag (full SHA). Empty = head of the branch this run was dispatched from"
+        default: ""
+        required: false
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Tag v${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ inputs.version }}
+      COMMIT: ${{ inputs.commit }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve the commit and check the version
+        id: resolve
+        run: |
+          set -euo pipefail
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::version must look like 0.10.0 (got '$VERSION')"; exit 1 ;;
+          esac
+          git fetch --quiet origin main
+          if ! sha=$(git rev-parse --verify --quiet "${COMMIT:-$GITHUB_SHA}^{commit}"); then
+            echo "::error::unknown commit '$COMMIT'"; exit 1
+          fi
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$sha is not on main; releases are tagged from main only"; exit 1
+          fi
+          pkg=$(git show "$sha:package.json" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).version)')
+          if [ "$pkg" != "$VERSION" ]; then
+            echo "::error::package.json at $sha is version $pkg, not $VERSION"; exit 1
+          fi
+          tag="v$VERSION"
+          if at=$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}"); then
+            if [ "$at" != "$sha" ]; then
+              echo "::error::$tag already exists at $at, not $sha; a release tag is never moved"; exit 1
+            fi
+            echo "$tag already points at $sha"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          { echo "sha=$sha"; echo "tag=$tag"; } >> "$GITHUB_OUTPUT"
+
+      - name: Release notes from the CHANGELOG section
+        env:
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git show "$SHA:CHANGELOG.md" > changelog.md
+          # The section for this version: from its "## [x.y.z]" heading up to the next "## " heading.
+          awk -v heading="## [$VERSION]" '
+            /^## / { if (found) exit; if (index($0, heading) == 1) { found = 1; next } }
+            found { print }
+          ' changelog.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md at $SHA has no '## [$VERSION]' section"; exit 1
+          fi
+          printf '\nCommit: %s\n' "$SHA" >> notes.md
+          { echo "## v$VERSION at $SHA"; echo; cat notes.md; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create the annotated tag
+        if: steps.resolve.outputs.exists == 'false'
+        env:
+          SHA: ${{ steps.resolve.outputs.sha }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$SHA" -m "Pantry Pal $TAG"
+          git push origin "refs/tags/$TAG"
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+            echo "release $TAG already exists; nothing to do"; exit 0
+          fi
+          gh release create "$TAG" --verify-tag --title "Pantry Pal $TAG" --notes-file notes.md
+          echo "::notice::Released $TAG at $SHA"

@@ -233,6 +233,7 @@ artifact the workflow built. A deploy whose origin does not match is a failed ru
 |---|---|---|
 | push to `main` | staging | gates green |
 | Actions → Deploy → Run workflow | staging or production | production also needs `confirm = deploy production` |
+| Actions → Release tag → Run workflow | annotated tag `v<version>` + GitHub Release | `version` must equal `package.json` at the commit, the commit must be on `main`, and an existing tag is never moved; the notes are that version's CHANGELOG section |
 
 One-time setup: repository secrets `CLOUDFLARE_API_TOKEN` (Workers Scripts:Edit,
 D1:Edit, Workers Routes:Edit on `ainadara.com`, Zone:Read) and `CLOUDFLARE_ACCOUNT_ID`.

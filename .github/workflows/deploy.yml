@@ -1,0 +1,131 @@
+name: Deploy (Cloudflare Workers)
+
+# Deploy-on-merge with the same gates a contributor runs locally, then verify what is
+# ACTUALLY serving rather than trusting the deploy's exit code (the lesson from
+# fitness.ainadara.com, which once sat four months behind a green build).
+#
+#   push to main        -> staging, automatically
+#   workflow_dispatch   -> staging or production; production also needs the typed
+#                          confirmation, because main auto-deploying to the phone a
+#                          household cooks from is the owner's call, not a merge's.
+#
+# Secrets (repository): CLOUDFLARE_API_TOKEN (Workers Scripts:Edit, D1:Edit, Workers
+# Routes:Edit on ainadara.com, Zone:Read), CLOUDFLARE_ACCOUNT_ID. BETTER_AUTH_SECRET and
+# the email/AI bindings already live on the Workers; a deploy never rewrites them.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
+        required: true
+      confirm:
+        description: 'Type "deploy production" to release to pantry.ainadara.com'
+        default: ""
+        required: false
+
+concurrency:
+  group: deploy-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET: ${{ inputs.environment || 'staging' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Refuse an unconfirmed production release
+        if: env.TARGET == 'production' && inputs.confirm != 'deploy production'
+        run: |
+          echo "::error::Production needs the confirmation phrase. Re-run with confirm = deploy production."
+          exit 1
+
+      - name: Refuse to run without Cloudflare credentials
+        if: env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == ''
+        run: |
+          echo "::error::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set (Settings → Secrets and variables → Actions). A silent no-deploy is worse than a red run."
+          exit 1
+
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # The same gates as CI, on the exact revision being shipped.
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:workers
+      - run: npm run test:scripts
+      - run: npm run build
+
+      - name: Record the artifact identity
+        id: built
+        run: |
+          set -euo pipefail
+          build=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("out/version.json","utf8")).build)')
+          version=$(node -e 'console.log(require("./package.json").version)')
+          grep -q "const VERSION = \"$build\"" out/sw.js
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Built v$version, PWA identity $build, for $TARGET"
+
+      - name: Resolve the canonical origin from wrangler.jsonc
+        id: origin
+        run: |
+          set -euo pipefail
+          origin=$(node -e '
+            const fs = require("fs");
+            const text = fs.readFileSync("wrangler.jsonc", "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+            const cfg = JSON.parse(text);
+            process.stdout.write(cfg.env[process.env.TARGET].vars.BETTER_AUTH_URL);
+          ')
+          echo "origin=$origin" >> "$GITHUB_OUTPUT"
+          echo "Canonical origin: $origin"
+
+      # Tracked, additive migrations first; a schema the Worker expects must exist
+      # before the Worker that expects it is live. Never resets household tables.
+      - name: Apply tracked D1 migrations
+        run: node scripts/migrate-d1.mjs --env "$TARGET" --remote
+
+      - name: Deploy the Worker + static assets
+        run: npx wrangler deploy --env "$TARGET"
+
+      # Prove the origin serves the artifact we built: same PWA identity in sw.js and
+      # version.json, and a healthy D1-backed API. Retries cover edge propagation.
+      - name: Verify what is actually serving
+        env:
+          ORIGIN: ${{ steps.origin.outputs.origin }}
+          EXPECTED: ${{ steps.built.outputs.build }}
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3 4 5 6 7 8; do
+            health=$(curl -s --max-time 15 "$ORIGIN/api/health" || true)
+            live_sw=$(curl -s --max-time 15 "$ORIGIN/sw.js" | sed -n 's/^const VERSION = "\([^"]*\)".*/\1/p' | head -1)
+            live_json=$(curl -s --max-time 15 "$ORIGIN/version.json" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).build||"")}catch{}})' || true)
+            echo "attempt $attempt: health=$health sw=$live_sw version.json=$live_json expected=$EXPECTED"
+            if [ "$live_sw" = "$EXPECTED" ] && [ "$live_json" = "$EXPECTED" ] && printf '%s' "$health" | grep -q '"status":"ok"'; then
+              echo "$ORIGIN serves build $EXPECTED with a healthy API."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::$ORIGIN did not serve the built artifact ($EXPECTED) with a healthy API. The deploy command succeeded, so inspect the Worker version and route in the Cloudflare dashboard before trusting this release."
+          exit 1
+
+      - name: Summary
+        if: success()
+        run: echo "Deployed v${{ steps.built.outputs.version }} (build ${{ steps.built.outputs.build }}) to $TARGET at ${{ steps.origin.outputs.origin }}" >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,6 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 async function files(dir) {
@@ -7,7 +8,9 @@ async function files(dir) {
   return (await Promise.all(entries.map(entry => entry.isDirectory() ? files(path.join(dir, entry.name)) : path.join(dir, entry.name)))).flat();
 }
 const all = (await files('out')).sort();
-const staticFiles = all.filter(file => !file.endsWith('.map') && !file.endsWith('/sw.js') && !file.endsWith('/_headers'));
+// version.json is release identity: always fetched from the network, never precached or hashed.
+const generated = new Set(['/sw.js', '/_headers', '/version.json']);
+const staticFiles = all.filter(file => !file.endsWith('.map') && !generated.has('/' + path.relative('out', file).split(path.sep).join('/')));
 const allowedExtensions = new Set(['.html', '.txt', '.js', '.css', '.json', '.webmanifest', '.png', '.jpg', '.jpeg', '.webp', '.avif', '.svg', '.ico', '.woff', '.woff2', '.ttf']);
 const exportedPaths = new Set(staticFiles.map(file => '/' + path.relative('out', file).split(path.sep).join('/')));
 for (const url of exportedPaths) {
@@ -24,9 +27,13 @@ if (!appManifest || typeof appManifest.name !== 'string' || !appManifest.name.tr
 for (const field of ['id', 'scope', 'start_url']) if (manifestPath(appManifest[field], field) !== '/') throw new Error(`Manifest ${field} must remain / for this application.`);
 if (!Array.isArray(appManifest.icons)) throw new Error('Manifest icons are missing.');
 for (const size of [192, 512]) {
-  const icon = appManifest.icons.find(icon => icon?.sizes === `${size}x${size}` && icon.type === 'image/png');
-  if (!icon) throw new Error(`Manifest needs a ${size}x${size} PNG icon.`);
-  const iconPath = manifestPath(icon.src, 'icon src');
+  if (!appManifest.icons.some(icon => icon?.sizes === `${size}x${size}` && icon.type === 'image/png')) throw new Error(`Manifest needs a ${size}x${size} PNG icon.`);
+}
+// Every listed icon (including the maskable one Android uses for adaptive icons) must ship and match its declared size.
+for (const icon of appManifest.icons) {
+  const iconPath = manifestPath(icon?.src, 'icon src');
+  const size = Number(/^(\d+)x\1$/.exec(String(icon?.sizes))?.[1]);
+  if (!size || icon.type !== 'image/png') throw new Error(`Manifest icon needs square PNG sizes: ${iconPath}`);
   if (!exportedPaths.has(iconPath)) throw new Error(`Manifest icon is missing from the export: ${iconPath}`);
   const png = await readFile(path.join('out', iconPath));
   if (png.length < 24 || png.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' || png.readUInt32BE(16) !== size || png.readUInt32BE(20) !== size) throw new Error(`Manifest icon dimensions do not match: ${iconPath}`);
@@ -42,6 +49,7 @@ const rules = [
   '/manifest.webmanifest\n  Cache-Control: no-cache',
   '/*.txt\n  Cache-Control: no-cache',
   '/sw.js\n  Cache-Control: no-cache, no-store, must-revalidate\n  Service-Worker-Allowed: /',
+  '/version.json\n  Cache-Control: no-cache, no-store, must-revalidate',
 ];
 for (const file of staticFiles) {
   const content = await readFile(file);
@@ -61,4 +69,11 @@ for (const file of staticFiles) {
 const version = hash.digest('hex').slice(0, 16);
 await writeFile('out/sw.js', source.replace('__BUILD_VERSION__', version).replace('/*__PRECACHE__*/ ["/offline/"]', JSON.stringify(manifest)));
 await writeFile('out/_headers', rules.join('\n\n') + '\n');
-console.log(`PWA ${version}: ${manifest.length} static assets, page-specific CSP hashes.`);
+// Release identity for "verify what is actually serving": the deploy workflow and the
+// uptime probe compare this with the artifact they built. Commit and time are provenance
+// only; `build` is the content hash shared with sw.js, so identical inputs stay comparable.
+const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+let commit = process.env.GITHUB_SHA ?? null;
+if (!commit) { try { commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { commit = null; } }
+await writeFile('out/version.json', JSON.stringify({ version: pkg.version, build: version, commit, builtAt: new Date().toISOString() }, null, 2) + '\n');
+console.log(`PWA ${version} (v${pkg.version}): ${manifest.length} static assets, page-specific CSP hashes.`);

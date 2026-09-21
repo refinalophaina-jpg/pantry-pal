@@ -75,6 +75,13 @@ test('precache is built only from public files, with deterministic CSP and no bu
   const globalRule = headers.split('\n\n').find(rule => rule.startsWith('/*\n'));
   assert.ok(!globalRule.includes('Cache-Control:'));
   assert.ok(headers.includes('/_next/static/*\n  Cache-Control: public, max-age=31536000, immutable'));
+  // Release identity is network-only: never precached, never cached by the browser.
+  const identity = JSON.parse(await readFile(path.join(dir, 'out/version.json'), 'utf8'));
+  assert.equal(identity.build, sw.match(/const VERSION = "([^"]+)"/)[1]);
+  assert.match(identity.version, /^\d+\.\d+\.\d+/);
+  assert.ok(!Number.isNaN(Date.parse(identity.builtAt)));
+  assert.ok(!sw.includes('/version.json'));
+  assert.ok(headers.includes('/version.json\n  Cache-Control: no-cache, no-store, must-revalidate'));
   await build();
   assert.equal(await readFile(path.join(dir, 'out/sw.js'), 'utf8'), sw);
   await writeFile(path.join(dir, 'public/sw.js'), source + '\n// security policy revision\n');
@@ -83,8 +90,13 @@ test('precache is built only from public files, with deterministic CSP and no bu
 }));
 
 test('build rejects API exports, unknown file types, malformed manifests and missing icons', async () => {
-  for (const kind of ['api', 'private-artifact', 'bad-json', 'external-icon', 'missing-icon']) await fixture(async ({ dir, manifest, build }) => {
+  for (const kind of ['api', 'private-artifact', 'bad-json', 'external-icon', 'missing-icon', 'wrong-size-maskable']) await fixture(async ({ dir, manifest, build }) => {
     if (kind === 'api') { await mkdir(path.join(dir, 'out/api')); await writeFile(path.join(dir, 'out/api/session.json'), '{}'); }
+    if (kind === 'wrong-size-maskable') {
+      // A maskable entry that points at a differently sized file must fail, not ship a cropped Android icon.
+      manifest.icons.push({ src: '/icons/icon-192.png', type: 'image/png', sizes: '512x512', purpose: 'maskable' });
+      await writeFile(path.join(dir, 'out/manifest.webmanifest'), JSON.stringify(manifest));
+    }
     if (kind === 'private-artifact') await writeFile(path.join(dir, 'out/database.sqlite'), 'private');
     if (kind === 'bad-json') await writeFile(path.join(dir, 'out/manifest.webmanifest'), '{');
     if (kind === 'external-icon') { manifest.icons[0].src = 'https://third-party.test/icon.png'; await writeFile(path.join(dir, 'out/manifest.webmanifest'), JSON.stringify(manifest)); }

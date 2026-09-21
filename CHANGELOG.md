@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 - Bounded public recipe cache, four concurrent nutrition lookups, and incremental Explore/food-guide grids.
 
+### Operations (independent review, 2026-09-21)
+- Deploy workflow: push to `main` ships staging after the full gates; production is a confirmed manual dispatch. Every deploy applies tracked D1 migrations, then verifies that the live `/api/health`, `/sw.js` identity and `/version.json` match the built artifact.
+- `/version.json` release identity generated on every build (never precached, served `no-store`).
+- Browser journeys run in CI against a local Worker + D1 (non-blocking while bedding in).
+- Maskable 512 px icon for Android adaptive launchers; the build validates every manifest icon.
+- Service worker registration skips non-http origins (native shells); Actions on v5, `engines.node >= 24`, Dependabot.
+
 ## [0.10.0] — 2026-09-21
 
 ### Added

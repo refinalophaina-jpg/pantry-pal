@@ -5,7 +5,9 @@ export function ServiceWorkerRegister() {
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
   const applying = useRef(false);
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || process.env.NODE_ENV !== 'production') return;
+    // Native shells (capacitor://, tauri://) serve the export from a local scheme where a
+    // service worker is neither supported nor useful; only http(s) origins register one.
+    if (!('serviceWorker' in navigator) || process.env.NODE_ENV !== 'production' || !window.location.protocol.startsWith('http')) return;
     let disposed = false;
     const onController = () => { if (applying.current) window.location.reload(); };
     navigator.serviceWorker.addEventListener('controllerchange', onController);

@@ -145,7 +145,8 @@ Performance checks start with repeatable measured traces under a recorded device
 | P3 | Browser suite implemented | Chromium five journeys, WebKit four online journeys and real-outage offline shell passed; physical device limits in release evidence |
 | P4 | Not started / optional track | Prepare native builds after web gates |
 | P5 | Read-only scope implemented | Scoped 24-hour IndexedDB shopping snapshot; offline writes deliberately unavailable |
-| P6 | Web cutover complete | Canonical domain routes to Worker/D1; live guest and security/asset checks pass; email inbox and first cron observation remain unverified |
+| P6 | Web cutover complete; estate integration open | Canonical domain routes to Worker/D1; live guest and security/asset checks pass; email inbox and first cron observation remain unverified. **Still open:** hub card on `ainadara.com`, `pantry` DNS row and uptime probe in `ainadara-infra` — see the review follow-ups |
+| Independent review (2026-09-21) | Complete; refinements landed | [Review record](verification/2026-09-21-fable-review.md): CI deploy with post-deploy verification, `/version.json` release identity, browser journeys in CI (`continue-on-error` until 2026-10-05), maskable icon, registrar guard, actions/engines/dependabot. Needs `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets before the deploy workflow can run |
 
 Every later phase updates its row with the implementation commit, checks, deployed identity (if any), remaining limits, and next action. The implementation release is 0.10.0; native metadata is aligned without claiming a native release.
 

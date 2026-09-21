@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service worker registration skips non-http origins (native shells); Actions on v5, `engines.node >= 24`, Dependabot.
 - Release-tag workflow (`.github/workflows/release.yml`): `v<version>` annotated tag plus a GitHub Release built from the CHANGELOG section, refused on a version/commit mismatch.
 
+### Dependencies (2026-09-21)
+- react, react-dom and @types/react 19.3.0; date-fns 4.4.0; @vitejs/plugin-react 6.1.1; the testing and native-shell tooling groups; actions/checkout 7, setup-node 7 and upload-artifact 7 (Dependabot #2–#9).
+
 ## [0.10.0] — 2026-09-21
 
 ### Added

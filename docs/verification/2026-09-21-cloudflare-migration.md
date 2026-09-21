@@ -92,8 +92,14 @@ human review. Default recipe discovery requires no provider secret.
 Cloudflare Email Service sender DNS was ready with no errors for
 `accounts@pantry.ainadara.com`. Message-body previews were disabled. A benign
 delivery check to the account owner was accepted/queued, using the Cloudflare
-Email Service skill. Inbox receipt and a real emailed verification/reset link
-journey were not observed; local auth lifecycle tests are not that evidence.
+Email Service skill.
+
+**Verified 2026-09-21 by the owner on the production domain:** the sign-up
+verification email arrived in the owner's inbox, and a password-reset link from
+the live site was delivered and worked end to end. This closes the "inbox receipt
+and emailed-link journey" gap named at cutover; local auth lifecycle tests remain
+the regression coverage, and this observation is the delivery evidence. No
+message body, address or link is recorded here.
 
 Physical iPhone/Android/iPad installation, camera hardware, lock/resume and store
 distribution remain unverified. Capacitor/Tauri version metadata is aligned, but

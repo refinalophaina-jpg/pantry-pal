@@ -11,3 +11,22 @@ For Safari-engine checks, install `npx playwright install webkit`, then run
 `context.setOffline(true)` may abort navigation before service-worker handling;
 keep this distinct from physical Safari offline verification. See the release
 evidence for observed results.
+
+To verify WebKit against a real local server outage, build the export and run:
+
+```bash
+npm run build
+npx playwright install webkit
+node scripts/check-webkit-offline.mjs
+```
+
+This standalone check starts its own ephemeral loopback static server, waits for
+an actual cached response, stops the server, and requires a new **Saved shopping
+list** document served by the service worker. HTTP caching is disabled, so an
+ordinary network-cache hit cannot satisfy the check. It uses only public files
+from `out/`, creates no accounts, sends no email, and closes its browser and
+servers. No local Worker or D1 fixture is needed. It then reports
+`context.setOffline(true)` separately as a diagnostic; a WebKit emulation error
+does not turn a successful real-outage assertion into a failure. JSON output
+records both outcomes. This verifies the exported shell in Playwright WebKit;
+physical Safari and installed-home-screen checks remain separate.

@@ -142,7 +142,7 @@ Performance checks start with repeatable measured traces under a recorded device
 | P0 | Implemented; staging verified | Fresh D1 authorized; Workers/Better Auth API, isolation, atomic operations and live guest recovery verified |
 | P1 | Implemented | Versioned static precache, prompted updates, per-page CSP; real browser install verified |
 | P2 | Implemented | Mobile More menu, touch controls, native dialogs, saved/scaled recipe handling; browser widths tested |
-| P3 | Browser suite implemented | Chromium five journeys passed; WebKit follow-up and physical device limits in release evidence |
+| P3 | Browser suite implemented | Chromium five journeys, WebKit four online journeys and real-outage offline shell passed; physical device limits in release evidence |
 | P4 | Not started / optional track | Prepare native builds after web gates |
 | P5 | Read-only scope implemented | Scoped 24-hour IndexedDB shopping snapshot; offline writes deliberately unavailable |
 | P6 | Web cutover complete | Canonical domain routes to Worker/D1; live guest and security/asset checks pass; email inbox and first cron observation remain unverified |

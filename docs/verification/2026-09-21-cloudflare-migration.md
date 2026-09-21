@@ -40,7 +40,7 @@ auth secrets were set through private temporary files and those files removed.
 | Production build | 16 static pages; 140 precache assets |
 | Dependency audit, including development dependencies | Zero reported vulnerabilities |
 | Chromium browser suite | Five journeys passed |
-| WebKit browser suite | Follow-up verification recorded below |
+| WebKit browser suite | Four online journeys passed; real static-server outage loaded the cached offline shopping shell |
 | Staging API smoke | 72 checks passed with actual Workers AI photo and meal-plan calls |
 | Staging guest UI smoke | 21 checks passed |
 | Production guest UI smoke | 21 checks passed |
@@ -48,6 +48,21 @@ auth secrets were set through private temporary files and those files removed.
 | Live artifact comparison | Service worker and manifest exactly matched; sign-in HTML and nine script assets matched after excluding Cloudflare's injected bot-detection snippet |
 | Live security headers | Per-page CSP, HSTS, no-referrer, nosniff, DENY and restricted Permissions-Policy observed |
 | Legacy workflows | Supabase auth configuration disabled manually; old catalog refresh already disabled for inactivity; both removed from release source |
+
+WebKit 26.6 online journeys passed after explicitly restoring focus to the More
+button (Safari pointer clicks do not focus buttons automatically). Its shopping
+case had one intermittent automation failure; two isolated repetitions and the
+final four-journey run passed after waiting for the POST response and blurring
+the numeric input. No application save failure was observed.
+
+Playwright WebKit's `context.setOffline(true)` aborts navigation with an internal
+error even with the route cached. An isolated static server using the actual
+export/SW was stopped after awaited cache installation: WebKit then loaded the
+cached **Saved shopping list** shell successfully. This verifies real network
+failure handling; the complete saved-item offline journey is verified in
+Chromium, while WebKit verifies IndexedDB persistence online and the offline
+shell separately. Physical Safari remains a separate device gate. Reproduce with
+`node scripts/check-webkit-offline.mjs`; no auth or personal data is involved.
 
 Browser journeys cover widths 320, 390, 820, 1180 and 1440; navigation/dialogs;
 real shopping writes, checked state and atomic pantry transfer; service-worker

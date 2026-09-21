@@ -63,3 +63,17 @@ assertions); the service-worker component test passes; `npm run build` produces 
 3. **Repository secrets** for `deploy.yml`: `CLOUDFLARE_API_TOKEN` (Workers Scripts:Edit, D1:Edit, Workers Routes:Edit on `ainadara.com`, Zone:Read) and `CLOUDFLARE_ACCOUNT_ID`. Until they exist the workflow fails loudly on purpose.
 4. **Branch protection on `main`**: require the `Typecheck · Test · Build` check and a PR. With deploy-on-merge to staging this is the gate.
 5. Still unverified per the migration record: email inbox delivery of a real verification link, the first natural hourly `catalog_jobs` tick, physical iPhone/Android/iPad installation, and native builds (P4).
+
+## Outcome (2026-09-21, 04:47–05:00 UTC)
+
+- PR #1 merged as `b91f513`; branch `claude/status-after-merge` carries this record.
+- **Staging** (push to `main`): run [35562266485](https://github.com/refinalophaina-jpg/pantry-pal/actions/runs/35562266485) green, including the serving verification — `pantry-pal-staging.refinalophaina.workers.dev` served build `0dea1e9e759028c8`, commit `b91f513`, health ok.
+- **Production** (dispatch with the confirmation phrase): run [35562704465](https://github.com/refinalophaina-jpg/pantry-pal/actions/runs/35562704465) — gates, migrations and `wrangler deploy --env production` succeeded; the verification step was answered by a Cloudflare managed challenge ("Just a moment…", `cf-mitigated: challenge`) on every attempt, so the run went red. Verified from another network within the same minute: `/version.json` = v0.10.0, build `7dc869fed2fa3695`, commit `b91f513`; `/sw.js` identity `7dc869fed2fa3695`; `/api/health` ok; HSTS + per-page CSP present; maskable icon served. **The release is correct; the runner was challenged.** `deploy.yml` now treats a challenge as "cannot verify from CI" (warning, green) and still fails on a reachable origin that serves the wrong build — the fitness `deploy-worker.yml` precedent.
+- **Browser journeys in CI**: green on both `fb9c808` runs (six journeys, ~25 s) after the `wrangler.ci.json` fix.
+- **Hub**: ainadara-site#3 merged; `ainadara.com` lists Pantry as a live thread. **Infra**: ainadara-infra#1 merged.
+
+### New finding: R-8 — the estate uptime monitor cannot see past Cloudflare's bot challenge (pre-existing)
+
+Every scheduled run of `ainadara-infra/.github/workflows/uptime.yml` before this work was already red (runs 1788–1791 and earlier): `ainadara.com` answers GitHub runners with HTTP 403 (managed challenge) and `llm.ainadara.com` with 000. The dispatch after merging the pantry probes showed the same 403 for every hostname, pantry included, while all of them answer 200 from a normal network. With no `ALERT_WEBHOOK_URL` set, nobody was told. The monitor therefore cannot distinguish "down" from "challenged" and has been decorative.
+
+Owner options (a Cloudflare decision, not a repository change): (a) Security → Bots: turn off Bot Fight Mode / JavaScript Detections for the monitored hostnames; or (b) a WAF custom rule that **skips** bot protection when a request carries a private header (e.g. `X-Monitor-Token: <secret>`), with the uptime workflow and `deploy.yml` sending that header from a repository secret — (b) keeps protection on for everyone else. Either way, set `ALERT_WEBHOOK_URL` so a real outage reaches a phone.

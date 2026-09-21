@@ -1,6 +1,6 @@
 # Pantry Pal reactivation masterplan
 
-**Status: Cloudflare release 0.10.0 deployed; live guest recovery verified.** Updated 2026-09-20 (America/Chicago; verification continued on 2026-09-21 UTC). Baseline: `main` at `461d4bfbb492fd90cbe9b0027c214dad8afb0f32`, package version `0.9.0`.
+**Status: Cloudflare release 0.10.0 on `main` (`b91f513`), deployed to staging and production by the deploy workflow on 2026-09-21 and verified by fetching the served build; hub card and monitoring merged.** Updated 2026-09-20 (America/Chicago; verification continued on 2026-09-21 UTC). Baseline: `main` at `461d4bfbb492fd90cbe9b0027c214dad8afb0f32`, package version `0.9.0`.
 
 This is the current reactivation plan. Read the [execution contract and seven plans](plans/README.md) next. Update this file's evidence, decisions, and status when implementation changes them. The earlier [ROADMAP](../ROADMAP.md) remains historical context, not the current execution queue.
 
@@ -146,6 +146,7 @@ Performance checks start with repeatable measured traces under a recorded device
 | P4 | Not started / optional track | Prepare native builds after web gates |
 | P5 | Read-only scope implemented | Scoped 24-hour IndexedDB shopping snapshot; offline writes deliberately unavailable |
 | P6 | Web cutover complete; estate integration open | Canonical domain routes to Worker/D1; live guest and security/asset checks pass; email inbox and first cron observation remain unverified. **Still open:** hub card on `ainadara.com`, `pantry` DNS row and uptime probe in `ainadara-infra` — see the review follow-ups |
+| Merge + release (2026-09-21 04:47–05:00 UTC) | Done; verified by fetching | PR #1 merged as `b91f513`. Deploy workflow: staging run 35562266485 green end to end (build `0dea1e9e759028c8`); production run 35562704465 deployed build `7dc869fed2fa3695` and its CI-side verification was answered by a Cloudflare bot challenge (`cf-mitigated: challenge`), while `https://pantry.ainadara.com/version.json`, `/sw.js` and `/api/health` verified from another network report exactly that build and commit. Browser-journey job green on both `fb9c808` runs. Hub card live on `ainadara.com` (ainadara-site#3); pantry probes merged into `ainadara-infra` (its monitor is challenged the same way — see the review follow-ups) |
 | Independent review (2026-09-21) | Complete; refinements landed | [Review record](verification/2026-09-21-fable-review.md): CI deploy with post-deploy verification, `/version.json` release identity, browser journeys in CI (`continue-on-error` until 2026-10-05), maskable icon, registrar guard, actions/engines/dependabot. Needs `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets before the deploy workflow can run |
 
 Every later phase updates its row with the implementation commit, checks, deployed identity (if any), remaining limits, and next action. The implementation release is 0.10.0; native metadata is aligned without claiming a native release.

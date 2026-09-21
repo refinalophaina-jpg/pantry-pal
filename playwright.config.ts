@@ -22,6 +22,9 @@ export default defineConfig({
     ...devices["iPhone 13"],
     browserName,
     baseURL,
+    // Runners with a system-provided Chromium (a sandbox that forbids `playwright install`)
+    // can point at it instead of downloading; unset means Playwright's own browser.
+    ...(process.env.PANTRY_E2E_CHROMIUM ? { launchOptions: { executablePath: process.env.PANTRY_E2E_CHROMIUM } } : {}),
     serviceWorkers: "allow",
     // Auth and guest recovery credentials can appear in DOM/request payloads.
     trace: "off",

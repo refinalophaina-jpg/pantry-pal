@@ -60,10 +60,7 @@ jobs:
     continue-on-error: true
     timeout-minutes: 25
     env:
-      # Workers AI is a remote binding even under `wrangler dev`; the journeys never call it,
-      # but the token (when present) keeps wrangler from prompting for a login.
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: "false"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -77,10 +74,19 @@ jobs:
       - name: Local-only auth secret
         run: printf 'BETTER_AUTH_SECRET=%s\n' "$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))')" > .dev.vars
 
+      # `wrangler dev` proxies the Workers AI binding to the edge even in local mode and
+      # refuses to start without a login in a non-interactive runner. The journeys never
+      # call AI, so they run against a generated config with that binding removed
+      # (D1, email and rate limits stay). Migrations first: /api/health reads app_metadata.
+      - name: CI Worker config (no remote bindings) + local D1 schema
+        run: |
+          node scripts/wrangler-ci-config.mjs
+          npm run cf:migrate:local
+
       - name: Start the local Worker
         run: |
           set -uo pipefail
-          npx wrangler dev --port 8787 --log-level warn > wrangler-dev.log 2>&1 &
+          npx wrangler dev --config wrangler.ci.json --port 8787 --log-level warn > wrangler-dev.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -sf http://localhost:8787/api/health >/dev/null 2>&1; then echo "Worker is up"; exit 0; fi
             sleep 2

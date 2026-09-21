@@ -18,19 +18,24 @@ export function CookMode({
   const { cookRecipe } = useSyncedActions();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
+  const [servings, setServings] = useState(Math.max(1, recipe.servings));
+  const [saving, setSaving] = useState(false);
+  const scale = servings / Math.max(1, recipe.servings);
   const [done, setDone] = useState<boolean[]>(
     () => recipe.steps.map(() => false),
   );
   const total = recipe.steps.length;
-  const allDone = done.every(Boolean);
+  const allDone = total > 0 && done.every(Boolean);
 
   function toggleStep(i: number) {
     setDone((arr) => arr.map((v, idx) => (idx === i ? !v : v)));
   }
 
   async function finish() {
+    if (saving) return;
+    setSaving(true);
     try {
-      const result = await cookRecipe(recipe.id);
+      const result = await cookRecipe(recipe, servings);
       if (!result.ok) {
         toast(`Missing: ${result.missing.join(", ")}`, "warn");
         return;
@@ -39,7 +44,7 @@ export function CookMode({
       onClose();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Cook failed", "warn");
-    }
+    } finally { setSaving(false); }
   }
 
   return (
@@ -48,7 +53,7 @@ export function CookMode({
         <button
           onClick={onClose}
           aria-label="Exit cook mode"
-          className="size-9 grid place-items-center rounded-lg hover:bg-[var(--bg)] cursor-pointer"
+          className="size-11 grid place-items-center rounded-lg hover:bg-[var(--bg)] cursor-pointer"
         >
           <X className="size-5" />
         </button>
@@ -64,6 +69,12 @@ export function CookMode({
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 max-w-3xl mx-auto w-full">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <label htmlFor="cook-servings" className="text-sm font-medium">Servings to cook</label>
+          <input id="cook-servings" type="number" min={1} max={100} value={servings} disabled={saving}
+            onChange={(event) => setServings(Math.max(1, Math.min(100, Number(event.target.value) || 1)))}
+            className="min-h-11 w-20 rounded-lg border border-[var(--border)] px-3 bg-[var(--surface)]" />
+        </div>
         <div className="mb-6 flex gap-1">
           {recipe.steps.map((_, i) => (
             <div
@@ -112,7 +123,7 @@ export function CookMode({
                 <li key={ing.name} className="flex justify-between">
                   <span>{ing.name}</span>
                   <span className="text-[var(--text-muted)]">
-                    −{ing.quantity}
+                    −{Math.round(ing.quantity * scale * 1000) / 1000}
                     {ing.unit}
                   </span>
                 </li>
@@ -140,10 +151,10 @@ export function CookMode({
           <Button
             className="ml-auto"
             onClick={finish}
-            disabled={!allDone}
+            disabled={!allDone || saving}
             title={allDone ? "" : "Mark all steps done first"}
           >
-            <Check className="size-4" /> I cooked this
+            <Check className="size-4" /> {saving ? "Saving…" : "I cooked this"}
           </Button>
         )}
       </footer>

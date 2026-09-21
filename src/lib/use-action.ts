@@ -6,7 +6,7 @@ import { useToast } from "@/components/toast";
 type Kind = "success" | "info" | "warn";
 
 /**
- * Runs a store action (which writes to Supabase and throws on failure) with
+ * Runs a store action (which writes through the household API and throws on failure) with
  * consistent UX: the success toast fires only AFTER the write actually
  * succeeds, and a failure surfaces as a warning toast instead of an unhandled
  * promise rejection plus a misleading "success" message.

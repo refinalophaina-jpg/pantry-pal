@@ -1,175 +1,96 @@
 "use client";
 
-import { ReactNode, useEffect, useMemo } from "react";
-import {
-  useAppStore,
-  pantryFromRow,
-  shoppingFromRow,
-  mealPlanFromRow,
-  usageFromRow,
-  savedRecipeFromRow,
-  type PantryRow,
-  type ShoppingRow,
-  type MealPlanRow,
-  type UsageRow,
-  type SavedRecipeRow,
-} from "./store";
-import { getSupabase } from "./supabase";
+import { ReactNode, useEffect } from "react";
+import { useAppStore, identityKey, refreshHouseholdData } from "./store";
+import { ApiError, invalidateApiRequests } from "./api-client";
 import { useAuth } from "./auth-context";
+import type { Recipe } from "./types";
+import { readOfflineShopping, clearOfflineShopping } from "./offline-shopping";
 
+/** Poll only while visible, and reconcile immediately after writes/resume. */
 export function DataSync({ children }: { children: ReactNode }) {
-  const householdId = useAppStoreSelector();
-  const { household, user } = useAuth();
-  const supabase = getSupabase();
-  const setPantry = useAppStore((s) => s._setPantry);
-  const setShopping = useAppStore((s) => s._setShopping);
-  const setMealPlan = useAppStore((s) => s._setMealPlan);
-  const setUsage = useAppStore((s) => s._setUsage);
-  const setSavedRecipes = useAppStore((s) => s._setSavedRecipes);
-  const upsertPantry = useAppStore((s) => s._upsertPantry);
-  const removePantry = useAppStore((s) => s._removePantry);
-  const upsertShopping = useAppStore((s) => s._upsertShopping);
-  const removeShopping = useAppStore((s) => s._removeShopping);
-  const upsertMealPlan = useAppStore((s) => s._upsertMealPlan);
-  const removeMealPlan = useAppStore((s) => s._removeMealPlan);
-  const upsertUsage = useAppStore((s) => s._upsertUsage);
-  const upsertSavedRecipe = useAppStore((s) => s._upsertSavedRecipe);
-  const removeSavedRecipe = useAppStore((s) => s._removeSavedRecipe);
-  const clearAll = useAppStore((s) => s._clearAllSynced);
-
-  // Effective household id can come from auth or from local placeholder.
-  const hid = household?.id ?? householdId;
+  const { household, user, refreshHousehold } = useAuth();
+  const userId = user?.id;
+  const householdId = household?.id;
+  const status = useAppStore((s) => s.syncStatus);
+  const error = useAppStore((s) => s.syncError);
+  const lastSyncedAt = useAppStore((s) => s.lastSyncedAt);
 
   useEffect(() => {
-    if (!hid || !user) {
-      clearAll();
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      const [p, s, m, u, r] = await Promise.all([
-        supabase
-          .from("pantry_items")
-          .select("*")
-          .eq("household_id", hid)
-          .order("expires_on", { ascending: true, nullsFirst: false }),
-        supabase
-          .from("shopping_items")
-          .select("*")
-          .eq("household_id", hid)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("meal_plan")
-          .select("*")
-          .eq("household_id", hid)
-          .order("date", { ascending: true }),
-        supabase
-          .from("usage_events")
-          .select("*")
-          .eq("household_id", hid)
-          .order("at", { ascending: false })
-          .limit(200),
-        supabase
-          .from("saved_recipes")
-          .select("*")
-          .eq("household_id", hid)
-          .order("created_at", { ascending: false }),
-      ]);
-      if (cancelled) return;
-      if (p.data) setPantry((p.data as PantryRow[]).map(pantryFromRow));
-      if (s.data) setShopping((s.data as ShoppingRow[]).map(shoppingFromRow));
-      if (m.data) setMealPlan((m.data as MealPlanRow[]).map(mealPlanFromRow));
-      if (u.data) setUsage((u.data as UsageRow[]).map(usageFromRow));
-      if (r.data)
-        setSavedRecipes((r.data as SavedRecipeRow[]).map(savedRecipeFromRow));
-    })();
-
-    const channel = supabase
-      .channel(`hh-${hid}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pantry_items", filter: `household_id=eq.${hid}` },
-        (payload) => {
-          if (payload.eventType === "DELETE") {
-            removePantry((payload.old as { id: string }).id);
-          } else {
-            upsertPantry(pantryFromRow(payload.new as PantryRow));
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "shopping_items", filter: `household_id=eq.${hid}` },
-        (payload) => {
-          if (payload.eventType === "DELETE") {
-            removeShopping((payload.old as { id: string }).id);
-          } else {
-            upsertShopping(shoppingFromRow(payload.new as ShoppingRow));
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "meal_plan", filter: `household_id=eq.${hid}` },
-        (payload) => {
-          if (payload.eventType === "DELETE") {
-            removeMealPlan((payload.old as { id: string }).id);
-          } else {
-            upsertMealPlan(mealPlanFromRow(payload.new as MealPlanRow));
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "usage_events", filter: `household_id=eq.${hid}` },
-        (payload) => upsertUsage(usageFromRow(payload.new as UsageRow)),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "saved_recipes", filter: `household_id=eq.${hid}` },
-        (payload) => {
-          if (payload.eventType === "DELETE") {
-            const id = (payload.old as { id: string }).id;
-            removeSavedRecipe(`saved-${id}`);
-          } else {
-            upsertSavedRecipe(savedRecipeFromRow(payload.new as SavedRecipeRow));
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      cancelled = true;
-      supabase.removeChannel(channel);
+    invalidateApiRequests();
+    useAppStore.getState()._clearAllSynced();
+    useAppStore.setState({ _identity: userId && householdId ? identityKey({ userId, householdId }) : null, syncStatus: "loading", syncError: null, lastSyncedAt: null });
+    if (!userId || !householdId) return;
+    const ctx = { userId, householdId, householdName: household?.name };
+    let stopped = false;
+    void readOfflineShopping().then((saved) => {
+      if (!stopped && useAppStore.getState()._identity === identityKey(ctx) && saved && (saved.userId !== userId || saved.householdId !== householdId)) void clearOfflineShopping();
+    }).catch(() => {});
+    let running = false;
+    let again = false;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let controller: AbortController | undefined;
+    const poll = async () => {
+      if (stopped) return;
+      if (running) { again = true; return; }
+      clearTimeout(timer);
+      if (document.visibilityState === "hidden") return;
+      running = true;
+      controller = new AbortController();
+      try {
+        await refreshHouseholdData(ctx, controller.signal);
+        failures = 0;
+      } catch (cause) {
+        if (stopped || controller.signal.aborted) return;
+        failures++;
+        if (cause instanceof ApiError && (cause.status === 401 || cause.status === 403)) {
+          useAppStore.getState()._clearAllSynced();
+          void clearOfflineShopping();
+          useAppStore.setState({ syncStatus: "error", syncError: "Your access changed. Sign in or choose a household again." });
+          void refreshHousehold();
+        } else {
+          useAppStore.setState({ syncStatus: navigator.onLine ? "error" : "offline", syncError: cause instanceof Error ? cause.message : "Could not refresh your household." });
+        }
+      } finally {
+        running = false;
+        if (!stopped) {
+          const delay = again ? 0 : Math.min(60_000, 10_000 * 2 ** Math.min(failures, 3));
+          again = false;
+          timer = setTimeout(poll, delay);
+        }
+      }
     };
-  }, [
-    hid,
-    user,
-    supabase,
-    setPantry,
-    setShopping,
-    setMealPlan,
-    setUsage,
-    setSavedRecipes,
-    upsertPantry,
-    removePantry,
-    upsertShopping,
-    removeShopping,
-    upsertMealPlan,
-    removeMealPlan,
-    upsertUsage,
-    upsertSavedRecipe,
-    removeSavedRecipe,
-    clearAll,
-  ]);
+    const wake = () => { void poll(); };
+    const offline = () => useAppStore.setState({ syncStatus: "offline", syncError: "You are offline. Changes need a connection." });
+    window.addEventListener("online", wake);
+    window.addEventListener("offline", offline);
+    window.addEventListener("focus", wake);
+    window.addEventListener("pantry:data-refresh", wake);
+    document.addEventListener("visibilitychange", wake);
+    void poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      controller?.abort();
+      invalidateApiRequests();
+      window.removeEventListener("online", wake);
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pantry:data-refresh", wake);
+      document.removeEventListener("visibilitychange", wake);
+    };
+    // Identity, rather than auth object/function identity, owns this lifecycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, householdId]);
 
-  return <>{children}</>;
-}
-
-// Internal placeholder to satisfy hook rules; we don't actually read state here.
-function useAppStoreSelector() {
-  return useMemo(() => "", []);
+  return <>
+    {(status === "error" || status === "offline") && <div role="status" className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+      {error} {lastSyncedAt && <>Last refreshed {new Date(lastSyncedAt).toLocaleTimeString()}.</>}
+      <button className="ml-3 min-h-11 underline" onClick={() => window.dispatchEvent(new Event("pantry:data-refresh"))}>Retry refresh</button>
+    </div>}
+    {children}
+  </>;
 }
 
 // Convenience: bound mutators for the current household + user
@@ -179,7 +100,7 @@ export function useSyncedActions() {
   if (!household || !user) {
     throw new Error("useSyncedActions called without auth context");
   }
-  const ctx = { householdId: household.id, userId: user.id };
+  const ctx = { householdId: household.id, userId: user.id, householdName: household.name };
   return {
     addPantryItem: (item: Parameters<typeof store.addPantryItem>[0]) =>
       store.addPantryItem(item, ctx),
@@ -193,14 +114,15 @@ export function useSyncedActions() {
       quantity: number,
       reason: "used" | "wasted",
     ) => store.consumeItem(id, quantity, reason, ctx),
-    cookRecipe: (recipeId: string) => store.cookRecipe(recipeId, ctx),
+    cookRecipe: (recipe: string | Recipe, servings?: number) => store.cookRecipe(recipe, ctx, servings),
     addShoppingItem: (item: Parameters<typeof store.addShoppingItem>[0]) =>
       store.addShoppingItem(item, ctx),
     toggleShoppingItem: (id: string) => store.toggleShoppingItem(id, ctx),
     removeShoppingItem: (id: string) => store.removeShoppingItem(id, ctx),
     clearCompleted: () => store.clearCompleted(ctx),
-    generateFromRecipe: (recipeId: string) =>
-      store.generateFromRecipe(recipeId, ctx),
+    generateFromRecipe: (recipe: string | Recipe, servings?: number) =>
+      store.generateFromRecipe(recipe, ctx, servings),
+    moveShoppingToPantry: (id: string) => store.moveShoppingToPantry(id, ctx),
     buildWeekList: (dates: string[]) => store.buildWeekList(dates, ctx),
     addMealPlan: (entry: Parameters<typeof store.addMealPlan>[0]) =>
       store.addMealPlan(entry, ctx),

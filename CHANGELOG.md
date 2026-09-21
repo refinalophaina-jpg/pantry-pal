@@ -5,9 +5,25 @@ All notable changes to Pantry Pal are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.10.0] — 2026-09-21
 
-_Changes land here before the next tagged release._
+### Added
+- Cloudflare Workers/D1 backend with verified email accounts, household isolation, invitation codes, and secure guest recovery.
+- Atomic, retry-safe pantry consumption, recipe cooking, shopping transfer, and shared-list updates.
+- Read-only shopping snapshots for up to 24 hours offline; explicit clearing and sign-out purge.
+- Versioned PWA shell, update prompt, security headers, accessible dialogs and phone/tablet navigation.
+- Tracked D1 migrations, starter catalog, and bounded catalog refresh with lease protection.
+
+### Changed
+- Removed Supabase runtime, browser keys and retired automation. Updated dependencies to a clean npm audit.
+- Web and native metadata aligned to 0.10.0. Native distribution remains a separate track.
+
+### Documentation
+- Complete the interrupted reactivation planning package: masterplan, seven
+  executable phases, baseline evidence and Cloudflare platform decision.
+- Set Workers/D1 as the target backend, with staged data/auth migration,
+  device/PWA/offline verification and a controlled domain cutover.
+- Record the actual implementation, verification evidence and remaining device limits.
 
 ## [0.9.0] — 2026-06-11
 

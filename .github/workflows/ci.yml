@@ -14,17 +14,12 @@ jobs:
   verify:
     name: Typecheck · Test · Build
     runs-on: ubuntu-latest
-    env:
-      # Public, RLS-protected anon values are safe in CI; real ones live in the
-      # host's env. These let modules that read them at import time load.
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -35,6 +30,12 @@ jobs:
 
       - name: Unit tests (with coverage)
         run: npm run test:cov
+
+      - name: Worker integration tests
+        run: npm run test:workers
+
+      - name: Importer and PWA tests
+        run: npm run test:scripts
 
       - name: Production build (static export)
         run: npm run build

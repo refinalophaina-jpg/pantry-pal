@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
-import { QuantityStepper } from "./page";
+import { QuantityStepper } from "@/components/quantity-stepper";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());

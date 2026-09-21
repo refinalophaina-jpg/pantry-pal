@@ -193,7 +193,7 @@ export default function RecipesPage() {
               equipmentOk={m.equipmentOk}
               pantry={pantry}
               onAddMissing={() =>
-                run(() => generateFromRecipe(r.id), {
+                run(() => generateFromRecipe(r), {
                   success: `Missing ingredients for ${r.name} added to shopping list.`,
                   error: "Couldn't build the shopping list — try again.",
                 })

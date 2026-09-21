@@ -3,17 +3,8 @@ import type { Recipe } from "./types";
 import { lookupNutrition, estimateRecipeNutrition } from "./nutrition";
 import { lookupIngredientByName } from "./food-db";
 
-// Make the Supabase cache fallback hermetic: any uncached ingredient resolves
-// to "not found" instead of hitting the network.
-vi.mock("./supabase", () => ({
-  getSupabase: () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: null }) }),
-      }),
-    }),
-  }),
-}));
+// Nutrition math tests keep the optional HTTP cache hermetic.
+vi.mock("./api-client", () => ({ apiRequest: vi.fn().mockResolvedValue({ data: null }) }));
 
 // Mock the canonical-ingredient DB lookup; default: nothing found.
 vi.mock("./food-db", () => ({

@@ -113,7 +113,7 @@ describe("RecipeDetail", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /add missing to list/i }),
     );
-    expect(generateFromRecipe).toHaveBeenCalledWith("r1");
+    expect(generateFromRecipe).toHaveBeenCalledWith(recipe, recipe.servings);
     expect(await screen.findByText(/added to shopping list/i)).toBeInTheDocument();
   });
 
@@ -139,6 +139,14 @@ describe("RecipeDetail", () => {
     await userEvent.click(screen.getByRole("button", { name: /fewer servings/i }));
     expect(screen.getByText("150 g")).toBeInTheDocument();
     expect(screen.getByText("225 g")).toBeInTheDocument();
+  });
+
+  it("passes the selected servings into the shopping action", async () => {
+    generateFromRecipe.mockResolvedValue(undefined);
+    renderDetail();
+    await userEvent.click(screen.getByRole("button", { name: /more servings/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add missing to list/i }));
+    expect(generateFromRecipe).toHaveBeenCalledWith(recipe, recipe.servings + 1);
   });
 
   it("won't drop below 1 serving", async () => {

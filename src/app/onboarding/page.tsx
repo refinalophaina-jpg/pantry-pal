@@ -75,10 +75,11 @@ export default function OnboardingPage() {
         <form onSubmit={submit} className="space-y-3">
           {tab === "create" ? (
             <div>
-              <label className="text-xs text-[var(--text-muted)] block mb-1">
+              <label htmlFor="household-name" className="text-xs text-[var(--text-muted)] block mb-1">
                 Household name
               </label>
               <Input
+                id="household-name"
                 placeholder="e.g. The Smith Kitchen"
                 required
                 value={name}
@@ -87,10 +88,11 @@ export default function OnboardingPage() {
             </div>
           ) : (
             <div>
-              <label className="text-xs text-[var(--text-muted)] block mb-1">
+              <label htmlFor="household-invite" className="text-xs text-[var(--text-muted)] block mb-1">
                 Invite code
               </label>
               <Input
+                id="household-invite"
                 placeholder="e.g. A1B2C3D4"
                 required
                 value={code}
@@ -98,7 +100,7 @@ export default function OnboardingPage() {
                 className="font-mono tracking-wider"
               />
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                Ask your partner to share theirs from Settings → Invite.
+                Ask your partner to choose Invite partner from the sidebar, or More → Invite partner on mobile.
               </p>
             </div>
           )}

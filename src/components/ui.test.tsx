@@ -110,4 +110,20 @@ describe("Modal", () => {
     await userEvent.click(screen.getByText("form"));
     expect(onClose).not.toHaveBeenCalled();
   });
+  it("names the dialog, traps Tab and restores the trigger on close", async () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger); trigger.focus();
+    const onClose = vi.fn();
+    const view = render(<Modal open onClose={onClose} title="Edit food"><Input aria-label="Food name" /><Button>Save</Button></Modal>);
+    const dialog = screen.getByRole("dialog", { name: "Edit food" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    const save = screen.getByRole("button", { name: "Save" }); save.focus();
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "Close Edit food" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+    view.rerender(<Modal open={false} onClose={onClose} title="Edit food"><p>Body</p></Modal>);
+    expect(trigger).toHaveFocus(); trigger.remove();
+  });
+
 });

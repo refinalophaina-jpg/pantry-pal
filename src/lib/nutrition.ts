@@ -3,7 +3,7 @@
  *
  * Strategy:
  * 1. Try a small built-in table (no network, instant).
- * 2. Fall back to Supabase `nutrition_cache` (shared across households).
+ * 2. Fall back to the Workers nutrition cache (shared across households).
  * 3. (Future) Fall back to USDA FoodData Central with API key.
  *
  * Values are expressed per 100 g (or per 100 ml for liquids; we treat them
@@ -11,7 +11,7 @@
  */
 
 import type { Recipe, UnitType, Nutrition } from "./types";
-import { getSupabase } from "./supabase";
+import { apiRequest } from "./api-client";
 import { lookupIngredientByName } from "./food-db";
 
 interface Per100 extends Nutrition {
@@ -142,11 +142,7 @@ interface CacheRow {
 
 async function cacheLookup(name: string): Promise<Per100 | null> {
   const key = normalize(name);
-  const { data } = await getSupabase()
-    .from("nutrition_cache")
-    .select("*")
-    .eq("key", key)
-    .maybeSingle();
+  const { data } = await apiRequest<{ data: CacheRow | null }>(`/api/nutrition?${new URLSearchParams({ name: key })}`);
   if (!data) return null;
   const row = data as CacheRow;
   return {

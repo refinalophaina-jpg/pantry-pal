@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import type { Recipe } from "@/lib/types";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, availableQuantity } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import { estimateRecipeNutrition, type RecipeNutrition } from "@/lib/nutrition";
 import { useToast } from "@/components/toast";
@@ -35,7 +35,7 @@ export function RecipeDetail({
 }: {
   recipe: Recipe;
   onClose: () => void;
-  onCook?: () => void;
+  onCook?: (recipe: Recipe) => void;
 }) {
   const pantry = useAppStore((s) => s.pantry);
   const savedRecipes = useAppStore((s) => s.savedRecipes);
@@ -88,10 +88,7 @@ export function RecipeDetail({
   // How much of this recipe the pantry already covers (non-optional only).
   const required = recipe.ingredients.filter((i) => !i.optional);
   const haveCount = required.filter((ing) => {
-    const owned = pantry.find(
-      (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
-    );
-    return owned && owned.quantity >= ing.quantity * scale;
+    return availableQuantity(pantry, ing.name, ing.unit) >= ing.quantity * scale;
   }).length;
   const haveTotal = required.length;
   const havePct = haveTotal ? Math.round((haveCount / haveTotal) * 100) : 0;
@@ -127,7 +124,7 @@ export function RecipeDetail({
   async function addMissing() {
     setBusy(true);
     try {
-      await generateFromRecipe(recipe.id);
+      await generateFromRecipe(recipe, servings);
       toast(`Missing ingredients added to shopping list.`);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed", "warn");
@@ -146,7 +143,7 @@ export function RecipeDetail({
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 z-10 size-9 rounded-full bg-black/40 backdrop-blur text-white grid place-items-center hover:bg-black/60 cursor-pointer"
+          className="absolute right-4 top-4 z-10 size-11 rounded-full bg-black/40 backdrop-blur text-white grid place-items-center hover:bg-black/60 cursor-pointer"
           aria-label="Close"
         >
           <X className="size-5" />
@@ -207,7 +204,7 @@ export function RecipeDetail({
                 aria-label="Fewer servings"
                 onClick={() => setServings((s) => Math.max(1, s - 1))}
                 disabled={servings <= 1}
-                className="size-5 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] disabled:opacity-40 cursor-pointer"
+                className="size-11 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] disabled:opacity-40 cursor-pointer"
               >
                 −
               </button>
@@ -218,7 +215,7 @@ export function RecipeDetail({
                 type="button"
                 aria-label="More servings"
                 onClick={() => setServings((s) => Math.min(99, s + 1))}
-                className="size-5 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
+                className="size-11 grid place-items-center rounded border border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
               >
                 +
               </button>
@@ -287,7 +284,7 @@ export function RecipeDetail({
               <Plus className="size-4" /> Add missing to list
             </Button>
             {onCook && (
-              <Button variant="secondary" onClick={onCook}>
+              <Button variant="secondary" onClick={() => onCook({ ...recipe, servings, ingredients: recipe.ingredients.map((ing) => ({ ...ing, quantity: ing.quantity * scale })) })}>
                 <ChefHat className="size-4" /> Cook now
               </Button>
             )}

@@ -1,0 +1,1 @@
+body{margin:0;background:#faf5ed;color:#2d3428;font:17px/1.6 system-ui,sans-serif;min-height:100dvh;display:grid;place-items:center;padding:env(safe-area-inset-top) 24px env(safe-area-inset-bottom)}main{max-width:420px;text-align:center}h1{font-family:Georgia,serif}a{display:inline-block;min-height:44px;color:#8d4731;font-weight:600}small{color:#5a6151}

@@ -1,43 +1,71 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ServiceWorkerRegister } from "./service-worker-register";
 
+beforeEach(() => vi.stubEnv("NODE_ENV", "production"));
 afterEach(() => {
-  vi.unstubAllGlobals();
-  // drop any serviceWorker override we added
-  Object.defineProperty(navigator, "serviceWorker", {
-    configurable: true,
-    value: undefined,
-  });
+  cleanup();
+  vi.unstubAllEnvs();
+  delete (navigator as { serviceWorker?: unknown }).serviceWorker;
 });
 
-describe("ServiceWorkerRegister (janitor)", () => {
-  it("unregisters existing service workers and clears caches on mount", async () => {
-    const unregister = vi.fn().mockResolvedValue(true);
-    Object.defineProperty(navigator, "serviceWorker", {
-      configurable: true,
-      value: {
-        getRegistrations: vi.fn().mockResolvedValue([{ unregister }, { unregister }]),
-      },
-    });
-    const del = vi.fn().mockResolvedValue(true);
-    vi.stubGlobal("caches", {
-      keys: vi.fn().mockResolvedValue(["v1", "v2"]),
-      delete: del,
-    });
+function browser(waiting: { postMessage: ReturnType<typeof vi.fn> } | null = null) {
+  const registration = Object.assign(new EventTarget(), { waiting, installing: null as (EventTarget & { state: string }) | null });
+  const serviceWorker = Object.assign(new EventTarget(), { controller: {}, register: vi.fn().mockResolvedValue(registration) });
+  Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: serviceWorker });
+  return { registration, serviceWorker };
+}
 
+describe("Service worker updates", () => {
+  it("registers the production worker with a fresh script check", async () => {
+    const { serviceWorker } = browser();
     const { container } = render(<ServiceWorkerRegister />);
-    expect(container).toBeEmptyDOMElement(); // renders nothing
-
-    await waitFor(() => expect(unregister).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(del).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(serviceWorker.register).toHaveBeenCalledWith("/sw.js", { scope: "/", updateViaCache: "none" }));
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("no-ops when service workers are unavailable", () => {
-    // Simulate an environment with no SW support: the property is absent.
+  it("leaves a waiting update inactive until the user applies it", async () => {
+    const waiting = { postMessage: vi.fn() };
+    browser(waiting);
+    render(<ServiceWorkerRegister />);
+    expect(await screen.findByRole("status")).toHaveTextContent("Finish any edits");
+    expect(waiting.postMessage).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Reload and update" }));
+    expect(waiting.postMessage).toHaveBeenCalledWith({ type: "APPLY_UPDATE" });
+  });
+
+  it("can postpone the update without activating it", async () => {
+    const waiting = { postMessage: vi.fn() };
+    browser(waiting);
+    render(<ServiceWorkerRegister />);
+    await userEvent.click(await screen.findByRole("button", { name: "Later" }));
+    expect(waiting.postMessage).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("notifies when a newer worker finishes installing", async () => {
+    const { registration } = browser();
+    render(<ServiceWorkerRegister />);
+    await act(async () => {});
+    const installing = Object.assign(new EventTarget(), { state: "installing" });
+    act(() => { registration.installing = installing; registration.dispatchEvent(new Event("updatefound")); });
+    act(() => {
+      registration.waiting = { postMessage: vi.fn() };
+      installing.state = "installed";
+      installing.dispatchEvent(new Event("statechange"));
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("An update is ready");
+  });
+
+  it("does not register during development or when unsupported", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const { serviceWorker } = browser();
+    const { unmount } = render(<ServiceWorkerRegister />);
+    expect(serviceWorker.register).not.toHaveBeenCalled();
+    unmount();
     delete (navigator as { serviceWorker?: unknown }).serviceWorker;
-    const { container } = render(<ServiceWorkerRegister />);
-    expect(container).toBeEmptyDOMElement();
-    expect("serviceWorker" in navigator).toBe(false);
+    vi.stubEnv("NODE_ENV", "production");
+    expect(render(<ServiceWorkerRegister />).container).toBeEmptyDOMElement();
   });
 });

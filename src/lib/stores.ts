@@ -1,4 +1,4 @@
-import { getSupabase } from "./supabase";
+import { apiRequest, householdPath } from "./api-client";
 
 /**
  * Household-owned stores and their item layouts (aisle/shelf/price). This is
@@ -22,46 +22,19 @@ export interface ItemLocation {
 }
 
 export async function listStores(householdId: string): Promise<Store[]> {
-  const { data, error } = await getSupabase()
-    .from("stores")
-    .select("id,name,zip")
-    .eq("household_id", householdId)
-    .order("name");
-  if (error) throw error;
-  return (data ?? []) as Store[];
+  return (await apiRequest<{ data: Store[] }>(householdPath(householdId, "stores"))).data;
 }
 
-export async function addStore(
-  householdId: string,
-  userId: string,
-  name: string,
-  zip?: string,
-): Promise<Store> {
-  const { data, error } = await getSupabase()
-    .from("stores")
-    .insert({ household_id: householdId, name, zip: zip ?? null, created_by: userId })
-    .select("id,name,zip")
-    .single();
-  if (error || !data) throw error ?? new Error("Couldn't add the store.");
-  return data as Store;
+export async function addStore(householdId: string, _userId: string, name: string, zip?: string): Promise<Store> {
+  return (await apiRequest<{ data: Store }>(householdPath(householdId, "stores"), { method: "POST", body: { name, zip: zip ?? null } })).data;
 }
 
-export async function removeStore(id: string): Promise<void> {
-  const { error } = await getSupabase().from("stores").delete().eq("id", id);
-  if (error) throw error;
+export async function removeStore(id: string, householdId: string): Promise<void> {
+  await apiRequest(householdPath(householdId, "stores", id), { method: "DELETE" });
 }
 
-export async function listItemLocations(
-  householdId: string,
-  storeId: string,
-): Promise<ItemLocation[]> {
-  const { data, error } = await getSupabase()
-    .from("item_locations")
-    .select("id,store_id,item_name,aisle,section,price")
-    .eq("household_id", householdId)
-    .eq("store_id", storeId);
-  if (error) throw error;
-  return (data ?? []) as ItemLocation[];
+export async function listItemLocations(householdId: string, storeId: string): Promise<ItemLocation[]> {
+  return (await apiRequest<{ data: ItemLocation[] }>(`${householdPath(householdId, "item-locations")}?${new URLSearchParams({ store_id: storeId })}`)).data;
 }
 
 export async function upsertItemLocation(p: {
@@ -73,25 +46,10 @@ export async function upsertItemLocation(p: {
   section?: string | null;
   price?: number | null;
 }): Promise<ItemLocation> {
-  const { data, error } = await getSupabase()
-    .from("item_locations")
-    .upsert(
-      {
-        household_id: p.householdId,
-        store_id: p.storeId,
-        item_name: p.itemName,
-        aisle: p.aisle ?? null,
-        section: p.section ?? null,
-        price: p.price ?? null,
-        updated_by: p.userId,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "store_id,item_name" },
-    )
-    .select("id,store_id,item_name,aisle,section,price")
-    .single();
-  if (error || !data) throw error ?? new Error("Couldn't save the location.");
-  return data as ItemLocation;
+  return (await apiRequest<{ data: ItemLocation }>(householdPath(p.householdId, "item-locations"), {
+    method: "POST",
+    body: { store_id: p.storeId, item_name: p.itemName, aisle: p.aisle ?? null, section: p.section ?? null, price: p.price ?? null },
+  })).data;
 }
 
 // Common stores the household can one-tap add.

@@ -1,6 +1,6 @@
 /**
- * TheMealDB v1 (free) — https://www.themealdb.com/api.php
- * No API key required for v1; ratelimited by client behavior.
+ * TheMealDB V1 with its documented developer/educational key "1".
+ * https://www.themealdb.com/api.php requires a supporter key for app-store release.
  * Calls go directly from the browser; CORS is open.
  */
 
@@ -43,7 +43,7 @@ async function get<T>(path: string, params?: Record<string, string>): Promise<T>
   const url = new URL(`${BASE}${path}`);
   if (params)
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`MealDB ${path}: ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -97,12 +97,14 @@ export async function lookupMeal(id: string): Promise<Recipe | null> {
 }
 
 export async function randomMeals(count = 6): Promise<Recipe[]> {
+  if (!Number.isInteger(count) || count < 1 || count > 6) throw new Error('Request between one and six random meals.');
   // TheMealDB's /random.php returns 1 meal per call; we do them in parallel.
   const calls = Array.from({ length: count }, () =>
     get<{ meals: MealDBFull[] | null }>("/random.php"),
   );
   // allSettled so one failed call doesn't wipe out the whole "Surprise me".
   const responses = await Promise.allSettled(calls);
+  if (responses.every(response => response.status === 'rejected')) throw new Error('World recipes are temporarily unavailable.');
   const recipes = responses
     .flatMap((r) => (r.status === "fulfilled" ? (r.value.meals ?? []) : []))
     .map(mealToRecipe);

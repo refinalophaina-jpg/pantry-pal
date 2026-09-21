@@ -1,157 +1,27 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-
-// Chainable Supabase mock: records the last rpc call and resolves a
-// configurable result for both rpc and query-builder chains.
-const h = vi.hoisted(() => {
-  const state: {
-    rpc: { name: string; params: unknown } | null;
-    result: { data: unknown; error: unknown };
-  } = { rpc: null, result: { data: null, error: null } };
-  const builder: Record<string, unknown> = {
-    rpc(name: string, params: unknown) {
-      state.rpc = { name, params };
-      return Promise.resolve(state.result);
-    },
-    from() {
-      return builder;
-    },
-    select() {
-      return builder;
-    },
-    or() {
-      return builder;
-    },
-    eq() {
-      return builder;
-    },
-    order() {
-      return builder;
-    },
-    limit() {
-      return builder;
-    },
-    maybeSingle() {
-      return Promise.resolve(state.result);
-    },
-    then(r: (v: unknown) => unknown, j?: (e: unknown) => unknown) {
-      return Promise.resolve(state.result).then(r, j);
-    },
-  };
-  return { state, builder };
-});
-
-vi.mock("./supabase", () => ({ getSupabase: () => h.builder }));
-
-import {
-  searchIngredients,
-  searchRecipeCatalog,
-  lookupIngredientByName,
-  lookupFoodByBarcode,
-  listTechniques,
-} from "./food-db";
-
-beforeEach(() => {
-  h.state.rpc = null;
-  h.state.result = { data: null, error: null };
-});
-
-const ingredientRow = {
-  id: "i1",
-  slug: "tomato",
-  name: "Tomato",
-  category: "Produce",
-  aliases: ["tomatoes"],
-  calories: 18,
-};
-
-describe("searchIngredients", () => {
-  it("calls the RPC with q + limit and maps rows", async () => {
-    h.state.result = { data: [ingredientRow], error: null };
-    const out = await searchIngredients("tom", 8);
-    expect(h.state.rpc).toEqual({
-      name: "search_ingredients",
-      params: { q: "tom", lim: 8 },
-    });
-    expect(out).toHaveLength(1);
-    expect(out[0].name).toBe("Tomato");
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { searchIngredients, searchRecipeCatalog, lookupIngredientByName, lookupFoodByBarcode, listTechniques } from "./food-db";
+const fetchMock = vi.fn();
+const row = { id: "i1", slug: "tomato", name: "Tomato", category: "Produce", aliases: ["tomatoes"], calories: 18 };
+const respond = (data: unknown) => fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data }), { headers: { "content-type": "application/json" } }));
+beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal("fetch", fetchMock); });
+afterEach(() => vi.unstubAllGlobals());
+describe("catalog HTTP contracts", () => {
+  it("encodes search text and limit and maps ingredient rows", async () => {
+    respond([row]);
+    expect((await searchIngredients("tom & onion", 8))[0].name).toBe("Tomato");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/catalog/ingredients?q=tom+%26+onion&limit=8");
   });
-
-  it("throws on RPC error", async () => {
-    h.state.result = { data: null, error: { message: "boom" } };
-    await expect(searchIngredients("x")).rejects.toThrow("boom");
+  it("does not turn a backend error into empty catalog results", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "Unavailable" } }), { status: 503, headers: { "content-type": "application/json" } }));
+    await expect(searchIngredients("rice")).rejects.toThrow("Unavailable");
   });
-});
-
-describe("searchRecipeCatalog", () => {
-  it("calls the catalog RPC and maps rows to Recipe", async () => {
-    h.state.result = {
-      data: [{ slug: "curry", name: "Chickpea Curry", cuisine: "Indian" }],
-      error: null,
-    };
-    const out = await searchRecipeCatalog("curry");
-    expect(h.state.rpc?.name).toBe("search_recipe_catalog");
-    expect(out[0].id).toBe("cat-curry");
-    expect(out[0].cuisine).toBe("Indian");
+  it("maps recipe catalog identifiers", async () => { respond([{ slug: "curry", name: "Curry" }]); expect((await searchRecipeCatalog("curry"))[0].id).toBe("cat-curry"); });
+  it("uses exact ingredient names and handles no match", async () => {
+    respond(row); expect((await lookupIngredientByName(" Tomato "))?.slug).toBe("tomato");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/catalog/ingredients?name=tomato");
+    respond(null); expect(await lookupIngredientByName("unknown")).toBeNull();
   });
-});
-
-describe("lookupIngredientByName", () => {
-  it("returns the first match mapped", async () => {
-    h.state.result = { data: [ingredientRow], error: null };
-    const ing = await lookupIngredientByName("Tomato");
-    expect(ing?.slug).toBe("tomato");
-  });
-
-  it("returns null for an empty name without querying", async () => {
-    expect(await lookupIngredientByName("   ")).toBeNull();
-  });
-
-  it("returns null when nothing matches", async () => {
-    h.state.result = { data: [], error: null };
-    expect(await lookupIngredientByName("nope")).toBeNull();
-  });
-});
-
-describe("lookupFoodByBarcode", () => {
-  it("maps a found product", async () => {
-    h.state.result = {
-      data: { id: "f1", name: "Oat Milk", barcode: "012", category: "Dairy" },
-      error: null,
-    };
-    const f = await lookupFoodByBarcode("012");
-    expect(f?.name).toBe("Oat Milk");
-    expect(f?.barcode).toBe("012");
-  });
-
-  it("returns null when not found", async () => {
-    h.state.result = { data: null, error: null };
-    expect(await lookupFoodByBarcode("000")).toBeNull();
-  });
-});
-
-describe("listTechniques", () => {
-  it("maps rows to Technique[]", async () => {
-    h.state.result = {
-      data: [
-        {
-          id: "t1",
-          slug: "searing",
-          title: "Searing",
-          category: "Heat & Protein",
-          difficulty: "medium",
-          summary: "Brown it.",
-          tags: ["heat"],
-        },
-      ],
-      error: null,
-    };
-    const out = await listTechniques();
-    expect(out[0].title).toBe("Searing");
-    expect(out[0].tags).toEqual(["heat"]);
-  });
-
-  it("throws on error", async () => {
-    h.state.result = { data: null, error: { message: "nope" } };
-    await expect(listTechniques()).rejects.toThrow("nope");
-  });
+  it("does not query an empty ingredient name", async () => { expect(await lookupIngredientByName(" ")).toBeNull(); expect(fetchMock).not.toHaveBeenCalled(); });
+  it("preserves barcode leading zeros", async () => { respond({ id: "f1", name: "Milk", barcode: "00123" }); expect((await lookupFoodByBarcode("00123"))?.barcode).toBe("00123"); });
+  it("filters techniques by an encoded category", async () => { respond([{ id: "t1", slug: "cut", title: "Cut", tags: [] }]); expect(await listTechniques("Knife skills")).toHaveLength(1); expect(fetchMock.mock.calls[0][0]).toContain("category=Knife+skills"); });
 });

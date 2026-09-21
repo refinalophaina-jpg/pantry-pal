@@ -1,5 +1,11 @@
 # Pantry Pal — Platform Roadmap
 
+> **Historical roadmap.** The current reactivation queue is
+> [docs/MASTERPLAN.md](docs/MASTERPLAN.md) and its
+> [action plans](docs/plans/README.md), including the owner's decision to replace
+> Supabase with Cloudflare. The phases and working agreement below describe
+> earlier development and do not override that current plan.
+
 > The plan to take Pantry Pal from a working v0.3.0 PWA to a fully-packaged,
 > cross-platform food app with a deep data layer, an AinaDara-grade interactive
 > UI, and exhaustive test coverage — refined continuously under version control.

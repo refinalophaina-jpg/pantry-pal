@@ -2,24 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { FoodVisual } from "@/components/food-visual";
-import {
-  Bookmark,
-  BookmarkCheck,
-  ChefHat,
-  Clock,
-  Filter,
-  Globe2,
-  Plus,
-  Sparkles,
-  Utensils,
-} from "lucide-react";
+import { Compass, Filter } from "lucide-react";
 import { matchRecipeAgainstPantry, useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import Link from "next/link";
-import { Badge, Button, Card, EmptyState, Input } from "@/components/ui";
+import { Button, EmptyState, Input, Segmented } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { CookMode } from "@/components/cook-mode";
 import { useAction } from "@/lib/use-action";
+import { cn } from "@/lib/utils";
 import type { Recipe } from "@/lib/types";
 
 const EQUIPMENT_OPTS = ["pan", "pot", "oven", "wok"];
@@ -32,6 +23,14 @@ const SUBSTITUTIONS: Record<string, string[]> = {
   rice: ["quinoa", "cauliflower rice", "couscous"],
   spaghetti: ["linguine", "fettuccine", "rice noodles"],
 };
+
+const chipClass = (active: boolean) =>
+  cn(
+    "min-h-9 cursor-pointer rounded-full border px-3 text-sm transition-colors",
+    active
+      ? "border-[var(--text)] bg-[var(--text)] text-[var(--surface)]"
+      : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-muted)] hover:text-[var(--text)]",
+  );
 
 export default function RecipesPage() {
   const builtins = useAppStore((s) => s.recipes);
@@ -71,92 +70,77 @@ export default function RecipesPage() {
     return Array.from(s);
   }, [recipes]);
 
+  const filtersActive = tag !== null || equipment.length > 0;
+
   return (
     <div>
       <PageHeader
         title="Recipes"
-        subtitle="Ranked by how much of each ingredient you already have."
+        subtitle="Ranked by how much of each recipe you already have."
         actions={
           <Button
             variant="secondary"
             size="sm"
+            aria-expanded={showFilters}
             onClick={() => setShowFilters((v) => !v)}
           >
-            <Filter className="size-4" /> Filters
+            <Filter className="size-4" /> Filters{filtersActive ? " · on" : ""}
           </Button>
         }
       />
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <Input
+          aria-label="Search recipes"
           placeholder="Search recipes…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          className="flex-1"
         />
-        <div className="flex gap-1 p-1 rounded-lg bg-[var(--bg)]">
-          <Button
-            size="sm"
-            variant={scope === "all" ? "primary" : "ghost"}
-            onClick={() => setScope("all")}
-          >
-            All
-          </Button>
-          <Button
-            size="sm"
-            variant={scope === "saved" ? "primary" : "ghost"}
-            onClick={() => setScope("saved")}
-          >
-            Saved ({saved.length})
-          </Button>
-        </div>
+        <Segmented
+          label="Which recipes"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: "all", label: "All" },
+            { value: "saved", label: `Saved (${saved.length})` },
+          ]}
+        />
       </div>
 
       {showFilters && (
-        <Card className="mb-4">
-          <div className="text-xs text-[var(--text-muted)] mb-2">
-            Available equipment
+        <div className="mb-6 space-y-4 rounded-xl border border-[var(--border)] p-4">
+          <div>
+            <p className="mb-2 text-sm text-[var(--text-muted)]">Equipment you have</p>
+            <div className="flex flex-wrap gap-2">
+              {EQUIPMENT_OPTS.map((e) => {
+                const active = equipment.some((eq) => eq.name === e);
+                return (
+                  <button key={e} type="button" aria-pressed={active} className={chipClass(active)} onClick={() => toggleEquipment(e)}>
+                    {e}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {EQUIPMENT_OPTS.map((e) => {
-              const active = equipment.some((eq) => eq.name === e);
-              return (
-                <Button
-                  key={e}
-                  variant={active ? "primary" : "secondary"}
-                  size="sm"
-                  onClick={() => toggleEquipment(e)}
-                >
-                  {e}
-                </Button>
-              );
-            })}
+          <div>
+            <p className="mb-2 text-sm text-[var(--text-muted)]">Tags</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" aria-pressed={tag === null} className={chipClass(tag === null)} onClick={() => setTag(null)}>
+                All
+              </button>
+              {allTags.map((t) => (
+                <button key={t} type="button" aria-pressed={tag === t} className={chipClass(tag === t)} onClick={() => setTag(t)}>
+                  {t}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="text-xs text-[var(--text-muted)] mb-2">Tags</div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={tag === null ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setTag(null)}
-            >
-              All
-            </Button>
-            {allTags.map((t) => (
-              <Button
-                key={t}
-                variant={tag === t ? "primary" : "secondary"}
-                size="sm"
-                onClick={() => setTag(t)}
-              >
-                {t}
-              </Button>
-            ))}
-          </div>
-        </Card>
+        </div>
       )}
 
       {ranked.length === 0 ? (
         <EmptyState
-          illustration="/illustrations/empty-recipes.svg"
           title={
             scope === "saved"
               ? "No saved recipes yet"
@@ -166,23 +150,23 @@ export default function RecipesPage() {
           }
           description={
             scope === "saved"
-              ? "Browse the Explore tab and tap the bookmark to save recipes here."
+              ? "Browse Explore and tap the bookmark to save recipes here."
               : q || tag
                 ? "Try a different search, or clear the filters."
-                : "Discover dishes from around the world on the Explore tab."
+                : "Discover dishes from around the world in Explore."
           }
           action={
             scope === "saved" || (!q && !tag) ? (
               <Link href="/explore">
                 <Button>
-                  <Globe2 className="size-4" /> Explore recipes
+                  <Compass className="size-4" /> Explore recipes
                 </Button>
               </Link>
             ) : undefined
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {ranked.map(({ r, m }) => (
             <RecipeCard
               key={r.id}
@@ -194,7 +178,7 @@ export default function RecipesPage() {
               pantry={pantry}
               onAddMissing={() =>
                 run(() => generateFromRecipe(r), {
-                  success: `Missing ingredients for ${r.name} added to shopping list.`,
+                  success: `Missing ingredients for ${r.name} added to the shopping list.`,
                   error: "Couldn't build the shopping list — try again.",
                 })
               }
@@ -208,25 +192,6 @@ export default function RecipesPage() {
         <CookMode recipe={cooking} onClose={() => setCooking(null)} />
       )}
     </div>
-  );
-}
-
-const CUISINE_GRADIENTS: Record<string, string> = {
-  Thai: "linear-gradient(135deg,#f59e0b,#16a34a)",
-  Vietnamese: "linear-gradient(135deg,#22c55e,#15803d)",
-  Chinese: "linear-gradient(135deg,#dc2626,#f59e0b)",
-  Korean: "linear-gradient(135deg,#ef4444,#7c3aed)",
-  Indian: "linear-gradient(135deg,#f59e0b,#dc2626)",
-  Nigerian: "linear-gradient(135deg,#16a34a,#ca8a04)",
-  Italian: "linear-gradient(135deg,#16a34a,#dc2626)",
-  French: "linear-gradient(135deg,#2563eb,#7c3aed)",
-  American: "linear-gradient(135deg,#2563eb,#16a34a)",
-  "Latin American": "linear-gradient(135deg,#f59e0b,#16a34a)",
-};
-
-function cuisineGradient(cuisine: string): string {
-  return (
-    CUISINE_GRADIENTS[cuisine] ?? "linear-gradient(135deg,#16a34a,#15803d)"
   );
 }
 
@@ -251,76 +216,46 @@ function RecipeCard({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <Card id={recipe.id} className="flex flex-col p-0 overflow-hidden">
-      <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} />
-      <div className="p-5 flex-1 flex flex-col">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="font-semibold text-lg flex items-center gap-2">
-            {recipe.name}
-            {recipe.savedId && !recipe.imageUrl && (
-              <Bookmark className="size-3.5 text-[var(--accent-hover)]" />
-            )}
-          </div>
-          <p className="text-sm text-[var(--text-muted)] mt-0.5">
-            {recipe.description}
-          </p>
+    <article id={recipe.id} className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} compact />
+        <div className="min-w-0 flex-1">
+          <h2 className="font-medium leading-snug">{recipe.name}</h2>
+          <p className="mt-0.5 text-sm text-[var(--text-muted)]">{recipe.description}</p>
         </div>
         {canCook ? (
-          <Badge tone="fresh">Cook now</Badge>
+          <span className="shrink-0 text-sm font-medium text-[var(--fresh)]">Ready</span>
         ) : (
-          <Badge tone="info">
-            {have}/{total}
-          </Badge>
+          <span className="shrink-0 text-sm tabular-nums text-[var(--text-muted)]">{have}/{total}</span>
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-3 text-xs text-[var(--text-muted)]">
-        <span className="flex items-center gap-1">
-          <Clock className="size-3" /> {recipe.minutes} min
-        </span>
-        <span>·</span>
-        <span className="capitalize">{recipe.difficulty}</span>
-        <span>·</span>
-        <span>{recipe.servings} servings</span>
-        <span>·</span>
-        <span>Needs: {recipe.equipment.join(", ")}</span>
-        {!equipmentOk && (
-          <Badge tone="soon" className="ml-auto">
-            Missing equipment
-          </Badge>
-        )}
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1">
-        {recipe.tags.map((t) => (
-          <Badge key={t} tone="default">
-            {t}
-          </Badge>
-        ))}
-      </div>
+      <p className="mt-3 text-sm text-[var(--text-muted)]">
+        {recipe.minutes} min · <span className="capitalize">{recipe.difficulty}</span> · {recipe.servings} servings
+        {recipe.equipment.length > 0 && <> · needs {recipe.equipment.join(", ")}</>}
+        {!equipmentOk && <span className="text-[var(--warn)]"> · missing equipment</span>}
+        {recipe.tags.length > 0 && <span className="block text-[var(--text-faint)]">{recipe.tags.join(" · ")}</span>}
+      </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="secondary" size="sm" onClick={() => setOpen((v) => !v)}>
-          {open ? "Hide" : "View"} recipe
-        </Button>
         {canCook ? (
           <Button size="sm" onClick={onCook}>
-            <ChefHat className="size-4" /> Cook now
+            Cook now
           </Button>
         ) : (
-          <Button size="sm" onClick={onAddMissing}>
-            <Plus className="size-4" /> Add missing to list
+          <Button variant="secondary" size="sm" onClick={onAddMissing}>
+            Add missing to list
           </Button>
         )}
+        <Button variant="secondary" size="sm" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {open ? "Hide" : "View"} recipe
+        </Button>
       </div>
 
       {open && (
-        <div className="mt-4 border-t border-[var(--border)] pt-4 space-y-4">
+        <div className="mt-4 space-y-4 border-t border-[var(--border)] pt-4">
           <div>
-            <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-2">
-              Ingredients
-            </div>
+            <h3 className="mb-2 text-sm font-medium">Ingredients</h3>
             <ul className="space-y-1.5 text-sm">
               {recipe.ingredients.map((ing) => {
                 const owned = pantry.find(
@@ -334,27 +269,19 @@ function RecipeCard({
                     className="flex items-center justify-between gap-3"
                   >
                     <span>
-                      {ing.quantity} {ing.unit} {ing.name}
+                      <span className="text-[var(--text-muted)]">{ing.quantity} {ing.unit}</span> {ing.name}
                       {ing.optional && (
-                        <span className="text-[var(--text-muted)]">
-                          {" "}
-                          (optional)
-                        </span>
+                        <span className="text-[var(--text-muted)]"> (optional)</span>
                       )}
                     </span>
                     {sufficient ? (
-                      <Badge tone="fresh">have</Badge>
+                      <span className="shrink-0 text-xs text-[var(--fresh)]">have</span>
                     ) : owned ? (
-                      <Badge tone="soon">
-                        only {owned.quantity}
-                        {owned.unit}
-                      </Badge>
+                      <span className="shrink-0 text-xs text-[var(--warn)]">only {owned.quantity}{owned.unit}</span>
                     ) : subs ? (
-                      <span className="text-xs text-[var(--text-muted)]">
-                        sub: {subs[0]}
-                      </span>
+                      <span className="shrink-0 text-xs text-[var(--text-muted)]">or {subs[0]}</span>
                     ) : (
-                      <Badge tone="expired">missing</Badge>
+                      <span className="shrink-0 text-xs text-[var(--danger)]">missing</span>
                     )}
                   </li>
                 );
@@ -363,10 +290,8 @@ function RecipeCard({
           </div>
 
           <div>
-            <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-2 flex items-center gap-1">
-              <Sparkles className="size-3" /> Steps
-            </div>
-            <ol className="space-y-2 text-sm list-decimal pl-5">
+            <h3 className="mb-2 text-sm font-medium">Steps</h3>
+            <ol className="list-decimal space-y-2 pl-5 text-sm">
               {recipe.steps.map((s, i) => (
                 <li key={i}>{s}</li>
               ))}
@@ -374,7 +299,6 @@ function RecipeCard({
           </div>
         </div>
       )}
-      </div>
-    </Card>
+    </article>
   );
 }

@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChefHat, Clock, ChevronDown } from "lucide-react";
+import { Search, Clock, ChevronDown } from "lucide-react";
 import { listTechniques, type Technique } from "@/lib/food-db";
-import { Badge, Card, Input, Skeleton } from "@/components/ui";
+import { Card, Input, Skeleton } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { cn } from "@/lib/utils";
 
@@ -79,13 +78,13 @@ export default function LearnPage() {
     <div>
       <PageHeader
         title="Learn"
-        subtitle="Cooking techniques, step by step — the craft behind the recipes."
+        subtitle="Cooking techniques, step by step."
       />
 
-      <nav className="flex flex-wrap gap-4 mb-5 text-sm underline"><Link className="min-h-11 inline-flex items-center" href="/food-guide/">Food & nutrition guide</Link><Link className="min-h-11 inline-flex items-center" href="/prep/">Three-day prep & storage</Link></nav>
       <div className="relative mb-6 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--text-muted)]" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--text-faint)]" aria-hidden="true" />
         <Input
+          aria-label="Search techniques"
           className="pl-9"
           placeholder="Search techniques…"
           value={query}
@@ -121,7 +120,7 @@ export default function LearnPage() {
       <div className="space-y-8">
         {groups.map(([category, items]) => (
           <section key={category}>
-            <h2 className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wide mb-3">
+            <h2 className="mb-3 text-base font-medium">
               {category}
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -134,10 +133,7 @@ export default function LearnPage() {
 
                   >
                     <button type="button" aria-expanded={open} className="w-full text-left min-h-11 flex items-start justify-between gap-3" onClick={() => setOpenId(open ? null : t.id)}>
-                      <div className="flex items-center gap-2">
-                        <ChefHat className="size-4 text-[var(--accent)]" />
-                        <h3 className="font-medium">{t.title}</h3>
-                      </div>
+                      <h3 className="font-medium">{t.title}</h3>
                       <ChevronDown
                         className={cn(
                           "size-4 text-[var(--text-muted)] transition-transform shrink-0",
@@ -148,21 +144,11 @@ export default function LearnPage() {
                     <p className="text-sm text-[var(--text-muted)] mt-1.5">
                       {t.summary}
                     </p>
-                    <div className="flex items-center gap-2 mt-3">
-                      <Badge
-                        tone={
-                          t.difficulty === "easy"
-                            ? "fresh"
-                            : t.difficulty === "hard"
-                              ? "expired"
-                              : "soon"
-                        }
-                      >
-                        {t.difficulty}
-                      </Badge>
+                    <div className="mt-3 flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                      <span className="capitalize">{t.difficulty}</span>
                       {t.minutes !== undefined && (
-                        <span className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)]">
-                          <Clock className="size-3" /> {t.minutes} min
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="size-3" aria-hidden="true" /> {t.minutes} min
                         </span>
                       )}
                     </div>

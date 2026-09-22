@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Home, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Input, Label, Segmented } from "@/components/ui";
 
 export default function OnboardingPage() {
   const { user, household, loading, createHousehold, joinHousehold, signOut } =
@@ -41,43 +40,28 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center px-4 bg-[var(--bg)]">
-      <Card className="w-full max-w-md">
-        <h1 className="text-xl font-semibold mb-1">Set up your household</h1>
-        <p className="text-sm text-[var(--text-muted)] mb-5">
-          Households share a pantry, shopping list, and meal plan. Create a new
-          one or join your partner&apos;s with their invite code.
+    <div className="grid min-h-screen place-items-center bg-[var(--bg)] px-4 py-10">
+      <div className="w-full max-w-sm">
+        <h1 className="text-2xl sm:text-3xl">Set up your household</h1>
+        <p className="mb-6 mt-1 text-sm text-[var(--text-muted)]">
+          A household shares one pantry, shopping list and meal plan. Create yours or join with an invite code.
         </p>
 
-        <div className="grid grid-cols-2 gap-2 mb-5 bg-[var(--bg)] p-1 rounded-lg">
-          <button
-            onClick={() => setTab("create")}
-            className={`text-sm rounded-md py-1.5 transition-colors cursor-pointer ${
-              tab === "create"
-                ? "bg-[var(--surface)] shadow-sm font-medium"
-                : "text-[var(--text-muted)]"
-            }`}
-          >
-            <Home className="size-3.5 inline mr-1" /> Create
-          </button>
-          <button
-            onClick={() => setTab("join")}
-            className={`text-sm rounded-md py-1.5 transition-colors cursor-pointer ${
-              tab === "join"
-                ? "bg-[var(--surface)] shadow-sm font-medium"
-                : "text-[var(--text-muted)]"
-            }`}
-          >
-            <Users className="size-3.5 inline mr-1" /> Join
-          </button>
-        </div>
+        <Segmented
+          label="Create or join"
+          className="mb-5 w-full"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "create", label: "Create" },
+            { value: "join", label: "Join" },
+          ]}
+        />
 
-        <form onSubmit={submit} className="space-y-3">
+        <form onSubmit={submit} className="space-y-4">
           {tab === "create" ? (
             <div>
-              <label htmlFor="household-name" className="text-xs text-[var(--text-muted)] block mb-1">
-                Household name
-              </label>
+              <Label htmlFor="household-name">Household name</Label>
               <Input
                 id="household-name"
                 placeholder="e.g. The Smith Kitchen"
@@ -88,9 +72,7 @@ export default function OnboardingPage() {
             </div>
           ) : (
             <div>
-              <label htmlFor="household-invite" className="text-xs text-[var(--text-muted)] block mb-1">
-                Invite code
-              </label>
+              <Label htmlFor="household-invite">Invite code</Label>
               <Input
                 id="household-invite"
                 placeholder="e.g. A1B2C3D4"
@@ -99,31 +81,33 @@ export default function OnboardingPage() {
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 className="font-mono tracking-wider"
               />
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Ask your partner to choose Invite partner from the sidebar, or More → Invite partner on mobile.
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Your partner finds it under Invite partner.
               </p>
             </div>
           )}
 
           {error && (
-            <div className="text-sm text-[var(--danger)] bg-[var(--danger-soft)] rounded-lg px-3 py-2">
+            <div role="alert" className="rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
               {error}
             </div>
           )}
 
           <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? "Working…" : tab === "create" ? "Create household" : "Join"}
+            {busy ? "Working…" : tab === "create" ? "Create household" : "Join household"}
           </Button>
         </form>
 
-        <button
-          type="button"
-          onClick={() => signOut()}
-          className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] mt-5"
-        >
-          Sign out
-        </button>
-      </Card>
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="min-h-11 text-sm text-[var(--text-muted)] underline-offset-4 hover:text-[var(--text)] hover:underline"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

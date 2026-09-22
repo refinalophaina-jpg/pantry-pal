@@ -17,7 +17,9 @@ export function DataSync({ children }: { children: ReactNode }) {
   const lastSyncedAt = useAppStore((s) => s.lastSyncedAt);
 
   useEffect(() => {
-    invalidateApiRequests();
+    // Requests from a previous identity were cancelled by this effect's
+    // cleanup and by auth-context; cancelling here as well would also abort
+    // the requests pages start in the same commit (child effects run first).
     useAppStore.getState()._clearAllSynced();
     useAppStore.setState({ _identity: userId && householdId ? identityKey({ userId, householdId }) : null, syncStatus: "loading", syncError: null, lastSyncedAt: null });
     if (!userId || !householdId) return;

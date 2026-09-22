@@ -1,15 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Sparkles, X, ShoppingCart, Bookmark, BookmarkCheck, ArrowUpRight } from "lucide-react";
+import { Plus, X, ShoppingCart, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import {
-  Badge,
   Button,
-  Card,
   EmptyState,
   Input,
+  Label,
   Modal,
   Select,
 } from "@/components/ui";
@@ -18,8 +17,8 @@ import { useMounted } from "@/lib/use-mounted";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/toast";
 import { format, startOfWeek, addDays, parseISO } from "date-fns";
+import { cn } from "@/lib/utils";
 
-import Link from "next/link";
 import { FoodVisual } from "@/components/food-visual";
 import { RecipeDetail } from "@/components/recipe-detail";
 import { CookMode } from "@/components/cook-mode";
@@ -76,7 +75,7 @@ function MealPlanContent() {
     });
   }
 
-  // AI generator state
+  // Plan generator state
   const [genOpen, setGenOpen] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
   const [prefs, setPrefs] = useState("Minimize waste; reuse ingredients across three days. Prefer Thai, Nigerian, Indian and Vietnamese vegetarian-friendly meals. Use pantry items first.");
@@ -106,6 +105,9 @@ function MealPlanContent() {
       };
     });
   }, [weekStart]);
+
+  const weekLabel = weekStart ? `${format(weekStart, "d MMM")} – ${format(addDays(weekStart, 6), "d MMM")}` : "This week";
+  const weekHasMeals = mealPlan.some(entry => days.some(day => day.date === entry.date));
 
   function toggleGenMeal(m: string) {
     setGenMeals((arr) =>
@@ -139,74 +141,65 @@ function MealPlanContent() {
     }
   }
 
+  const weekButton = "grid size-11 cursor-pointer place-items-center text-[var(--text-muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]";
+
   return (
     <div>
       <PageHeader
         title="Meal plan"
-        subtitle="Tap a meal to see its recipe, adjust servings, or start cooking. Drag meals to rearrange."
+        subtitle="Tap a meal for its recipe, servings and cooking. Drag a meal to move it."
         actions={
-          <div className="flex gap-2 flex-wrap">
-            <Button size="sm" onClick={() => setGenOpen(true)} disabled={!mounted}>
-              <Sparkles className="size-4" /> Generate
+          <>
+            <div role="group" aria-label="Week" className="inline-flex min-h-11 w-full items-center justify-between overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] sm:w-auto">
+              <button type="button" aria-label="Previous week" className={weekButton} onClick={() => setWeekOffset((v) => v - 1)}>
+                <ChevronLeft className="size-4" />
+              </button>
+              <button
+                type="button"
+                className="min-w-32 cursor-pointer px-2 text-sm tabular-nums disabled:cursor-default disabled:text-[var(--text)]"
+                onClick={() => setWeekOffset(0)}
+                disabled={weekOffset === 0}
+                title={weekOffset === 0 ? "This week" : "Back to this week"}
+              >
+                {weekOffset === 0 ? "This week" : weekLabel}
+              </button>
+              <button type="button" aria-label="Next week" className={weekButton} onClick={() => setWeekOffset((v) => v + 1)}>
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => setGenOpen(true)} disabled={!mounted}>
+              Generate plan
             </Button>
             <Button
-              variant="secondary"
               size="sm"
-              onClick={() => setWeekOffset((v) => v - 1)}
+              disabled={actionBusy || !weekHasMeals}
+              onClick={() => void mealAction(() => buildWeekList(days.map(day => day.date)), "This week’s missing ingredients added to Shopping.")}
             >
-              ← Prev week
+              <ShoppingCart className="size-4" /> {actionBusy ? "Saving…" : "Shop this week"}
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setWeekOffset(0)}
-              disabled={weekOffset === 0}
-            >
-              This week
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setWeekOffset((v) => v + 1)}
-            >
-              Next →
-            </Button>
-          </div>
+          </>
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Button variant="secondary" disabled={actionBusy || !mealPlan.some(entry => days.some(day => day.date === entry.date))} onClick={() => void mealAction(() => buildWeekList(days.map(day => day.date)), "This week’s missing ingredients added to Shopping.")}>
-          <ShoppingCart className="size-4" /> {actionBusy ? "Saving…" : "Shop this week"}
-        </Button>
-        <Link href="/prep/" className="min-h-11 inline-flex items-center gap-1 underline">Three-day prep plans</Link>
-            <Link href="/shopping/" className="min-h-11 inline-flex items-center gap-1 text-sm text-[var(--accent-hover)] underline underline-offset-4">Open shopping list <ArrowUpRight className="size-4" /></Link>
-        <Link href="/recipes/" className="min-h-11 inline-flex items-center gap-1 text-sm text-[var(--text-muted)] underline underline-offset-4">My recipes <ArrowUpRight className="size-4" /></Link>
-      </div>
-      <Card className="overflow-x-auto p-0">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
         {!mounted ? (
-          <div className="min-w-[800px] p-3 space-y-2">
+          <div className="min-w-[800px] space-y-2 p-3">
             {Array.from({ length: 5 }, (_, i) => (
-              <div
-                key={i}
-                className="h-[72px] rounded-md bg-[var(--bg)] animate-pulse"
-              />
+              <div key={i} className="skeleton h-[72px] rounded-md" />
             ))}
           </div>
         ) : (
-        <div className="grid grid-cols-[100px_repeat(7,minmax(140px,1fr))] min-w-[800px]">
-          <div className="p-3 text-xs text-[var(--text-muted)] border-b border-[var(--border)]" />
+        <div className="grid min-w-[800px] grid-cols-[96px_repeat(7,minmax(140px,1fr))]">
+          <div className="border-b border-[var(--border)] p-3" />
           {days.map((d) => {
             const isToday = d.date === todayStr;
             return (
               <div
                 key={d.date}
-                className={`p-3 text-center border-b border-l border-[var(--border)] ${
-                  isToday ? "bg-[var(--accent-soft)]" : ""
-                }`}
+                className={cn("border-b border-l border-[var(--border)] p-3 text-center", isToday && "bg-[var(--accent-soft)]")}
               >
                 <div className="text-xs text-[var(--text-muted)]">{d.label}</div>
-                <div className="text-lg font-semibold">{d.short}</div>
+                <div className={cn("text-lg tabular-nums", isToday ? "font-medium" : "")}>{d.short}</div>
               </div>
             );
           })}
@@ -226,7 +219,7 @@ function MealPlanContent() {
               onOpen={setSelectedRecipe}
               isFavorite={isFavorite}
               actionBusy={actionBusy}
-              onFavorite={(recipe) => void mealAction(() => saveRecipe(recipe), "Favorited — find it in My Recipes.")}
+              onFavorite={(recipe) => void mealAction(() => saveRecipe(recipe), "Saved to My Recipes.")}
               onShop={(recipe) => void mealAction(() => generateFromRecipe(recipe, recipe.servings), "Missing ingredients added to Shopping.")}
               dragId={dragId}
               overKey={overKey}
@@ -241,14 +234,14 @@ function MealPlanContent() {
           ))}
         </div>
         )}
-      </Card>
+      </div>
 
-      {mealPlan.length === 0 && (
+      {mounted && mealPlan.length === 0 && (
         <div className="mt-4">
           <EmptyState
-            illustration="/illustrations/empty-meal-plan.svg"
             title="No meals planned yet"
-            description="Tap any slot to drop in a recipe."
+            description="Tap a slot to add a recipe, or generate a plan from what you have."
+            action={<Button variant="secondary" onClick={() => setGenOpen(true)}>Generate plan</Button>}
           />
         </div>
       )}
@@ -261,7 +254,7 @@ function MealPlanContent() {
         onClose={() => setAddContext(null)}
         title={
           addContext
-            ? `Add ${addContext.meal} on ${format(parseISO(addContext.date), "EEE MMM d")}`
+            ? `Add ${addContext.meal} on ${format(parseISO(addContext.date), "EEE d MMM")}`
             : ""
         }
       >
@@ -291,16 +284,14 @@ function MealPlanContent() {
       >
         {recipeCount === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">
-            Save a few recipes first (browse Explore) so there&apos;s something
-            to plan with.
+            Save a few recipes first (browse Explore) so there is something to plan with.
           </p>
         ) : (
           <div className="space-y-4">
             <div>
-              <label className="text-xs text-[var(--text-muted)] block mb-1">
-                Preferences (optional)
-              </label>
+              <Label htmlFor="gen-prefs">Preferences (optional)</Label>
               <Input
+                id="gen-prefs"
                 placeholder="e.g. lots of veggies, quick on weeknights, Thai + Italian"
                 value={prefs}
                 onChange={(e) => setPrefs(e.target.value)}
@@ -308,42 +299,44 @@ function MealPlanContent() {
             </div>
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="text-xs text-[var(--text-muted)] block mb-1">
-                  Span
-                </label>
+                <Label htmlFor="gen-span">Span</Label>
                 <Select
+                  id="gen-span"
                   value={String(genDays)}
                   onChange={(e) => setGenDays(Number(e.target.value))}
                 >
+                  <option value="3">Three days</option>
                   <option value="7">This week (7 days)</option>
                   <option value="14">Two weeks (14 days)</option>
                 </Select>
               </div>
               <div className="flex-1">
-                <label className="text-xs text-[var(--text-muted)] block mb-1">
-                  Meals
-                </label>
+                <p className="mb-1 text-sm text-[var(--text-muted)]">Meals</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {MEALS.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => toggleGenMeal(m)}
-                      className={`rounded-full px-2.5 py-1 text-xs border capitalize transition-colors ${
-                        genMeals.includes(m)
-                          ? "bg-[var(--accent)] border-[var(--accent)] text-white"
-                          : "border-[var(--border)] text-[var(--text-muted)]"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
+                  {MEALS.map((m) => {
+                    const active = genMeals.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => toggleGenMeal(m)}
+                        className={cn(
+                          "min-h-9 cursor-pointer rounded-full border px-3 text-sm capitalize transition-colors",
+                          active
+                            ? "border-[var(--text)] bg-[var(--text)] text-[var(--surface)]"
+                            : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                        )}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              Picks from your {recipeCount} recipes, starting the displayed week.
-              Up to 10 generations/day.
+            <p className="text-sm text-[var(--text-muted)]">
+              Picks from your {recipeCount} recipes, starting the displayed week. Up to 10 generations a day.
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setGenOpen(false)} disabled={genBusy}>
@@ -353,8 +346,7 @@ function MealPlanContent() {
                 onClick={generatePlan}
                 disabled={genBusy || genMeals.length === 0}
               >
-                <Sparkles className="size-4" />
-                {genBusy ? "Planning…" : "Generate"}
+                {genBusy ? "Planning…" : "Generate plan"}
               </Button>
             </div>
           </div>
@@ -401,9 +393,10 @@ function Row({
     meal: (typeof MEALS)[number],
   ) => void;
 }) {
+  const slotButton = "grid size-11 cursor-pointer place-items-center rounded text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:opacity-50";
   return (
     <>
-      <div className="p-3 text-xs uppercase tracking-wide text-[var(--text-muted)] border-b border-[var(--border)] flex items-center">
+      <div className="flex items-center border-b border-[var(--border)] p-3 text-sm capitalize text-[var(--text-muted)]">
         {meal}
       </div>
       {days.map((d) => {
@@ -424,15 +417,14 @@ function Row({
             }}
             onDragLeave={() => onOver(null)}
             onDrop={(e) => onDrop(e, d.date, meal)}
-            className={`p-2 border-b border-l min-h-[80px] flex flex-col gap-1.5 transition-colors ${
-              isOver
-                ? "border-[var(--terracotta-q)] bg-[var(--accent-soft)]"
-                : "border-[var(--border)]"
-            }`}
+            className={cn(
+              "flex min-h-[80px] flex-col gap-1.5 border-b border-l p-2 transition-colors",
+              isOver ? "border-[var(--terracotta-q)] bg-[var(--accent-soft)]" : "border-[var(--border)]",
+            )}
           >
             {entries.map((e) => {
               const recipe = recipes.find((r) => r.id === e.recipeId);
-              if (!recipe) return <div key={e.id} className="text-xs p-2">Recipe unavailable<Button variant="ghost" onClick={() => onRemove(e.id)}>Remove meal</Button></div>;
+              if (!recipe) return <div key={e.id} className="p-2 text-xs">Recipe unavailable<Button variant="ghost" size="sm" onClick={() => onRemove(e.id)}>Remove meal</Button></div>;
               return (
                 <div
                   key={e.id}
@@ -443,32 +435,32 @@ function Row({
                     onDragStartEntry(e.id);
                   }}
                   onDragEnd={onDragEndEntry}
-                  className={`text-xs rounded-md bg-[var(--accent-soft)] text-[var(--accent-hover)] p-2 group cursor-grab active:cursor-grabbing ${
-                    dragId === e.id ? "opacity-40" : ""
-                  }`}
+                  className={cn(
+                    "group cursor-grab rounded-md border border-[var(--border)] bg-[var(--bg)] p-2 text-xs active:cursor-grabbing",
+                    dragId === e.id && "opacity-40",
+                  )}
                 >
-                  <button type="button" onClick={(event) => { event.currentTarget.focus(); onOpen(recipe); }} className="min-h-11 w-full text-left leading-snug font-medium hover:underline focus-visible:outline-2 rounded" aria-label={`Open recipe: ${recipe.name}`}>
+                  <button type="button" onClick={(event) => { event.currentTarget.focus(); onOpen(recipe); }} className="flex min-h-11 w-full items-start gap-2 rounded text-left leading-snug hover:text-[var(--accent-hover)]" aria-label={`Open recipe: ${recipe.name}`}>
                     <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} compact />
-                    {recipe.name}
-                    <span className="block mt-1 text-[10px] font-normal text-[var(--text-muted)]">{recipe.minutes} min · {recipe.servings} servings</span>
+                    <span className="min-w-0">
+                      <span className="block font-medium">{recipe.name}</span>
+                      <span className="block text-[var(--text-muted)]">{recipe.minutes} min · {recipe.servings} servings</span>
+                    </span>
                   </button>
-                  <div className="flex items-center justify-between border-t border-[var(--border)] mt-1">
-                    <button type="button" disabled={actionBusy} onClick={() => onShop(recipe)} aria-label={`Add ingredients for ${recipe.name} to shopping list`} title="Add missing ingredients" className="size-11 grid place-items-center rounded hover:bg-[var(--surface)] disabled:opacity-50"><ShoppingCart className="size-4" /></button>
-                    <button type="button" disabled={actionBusy || isFavorite(recipe)} onClick={() => onFavorite(recipe)} aria-label={`${isFavorite(recipe) ? "Favorited" : "Favorite"}: ${recipe.name}`} aria-pressed={isFavorite(recipe)} title={isFavorite(recipe) ? "Saved in My Recipes" : "Favorite in My Recipes"} className="size-11 grid place-items-center rounded hover:bg-[var(--surface)] disabled:opacity-60">{isFavorite(recipe) ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}</button>
-                  <button
-                    onClick={() => onRemove(e.id)}
-                    className="size-11 grid place-items-center rounded hover:bg-[var(--surface)]"
-                    aria-label={`Remove ${recipe.name} from plan`}
-                  >
-                    <X className="size-3" />
-                  </button>
+                  <div className="mt-1 flex items-center justify-between border-t border-[var(--border)] pt-1">
+                    <button type="button" disabled={actionBusy} onClick={() => onShop(recipe)} aria-label={`Add ingredients for ${recipe.name} to shopping list`} title="Add missing ingredients" className={slotButton}><ShoppingCart className="size-4" /></button>
+                    <button type="button" disabled={actionBusy || isFavorite(recipe)} onClick={() => onFavorite(recipe)} aria-label={`${isFavorite(recipe) ? "Favorited" : "Favorite"}: ${recipe.name}`} aria-pressed={isFavorite(recipe)} title={isFavorite(recipe) ? "Saved in My Recipes" : "Save to My Recipes"} className={slotButton}>{isFavorite(recipe) ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}</button>
+                    <button type="button" onClick={() => onRemove(e.id)} className={slotButton} aria-label={`Remove ${recipe.name} from plan`}>
+                      <X className="size-4" />
+                    </button>
                   </div>
                 </div>
               );
             })}
             <button
+              type="button"
               onClick={() => onAdd(d.date)}
-              className="mt-auto text-xs text-[var(--text-muted)] hover:text-[var(--accent-hover)] flex items-center justify-center gap-1 min-h-11 py-1 rounded-md hover:bg-[var(--bg)]"
+              className="mt-auto flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-md py-1 text-xs text-[var(--text-faint)] hover:bg-[var(--bg)] hover:text-[var(--text)]"
             >
               <Plus className="size-3" /> Add
             </button>
@@ -488,20 +480,23 @@ function PickRecipe({ onPick }: { onPick: (id: string) => void }) {
   if (recipes.length === 0) {
     return (
       <p className="text-sm text-[var(--text-muted)]">
-        No recipes yet — browse the Explore tab and save a few first.
+        No recipes yet. Browse Explore and save a few first.
       </p>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
-        {recipes.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.name}
-          </option>
-        ))}
-      </Select>
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="pick-recipe">Recipe</Label>
+        <Select id="pick-recipe" value={selected} onChange={(e) => setSelected(e.target.value)}>
+          {recipes.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </Select>
+      </div>
       <div className="flex justify-end gap-2">
         <Button onClick={() => onPick(selected)} disabled={!selected}>
           Add to plan

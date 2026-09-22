@@ -71,14 +71,14 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
         : Info;
   const tone =
     toast.kind === "success"
-      ? "border-[var(--accent)] text-[var(--accent-hover)]"
+      ? "text-[var(--fresh)]"
       : toast.kind === "warn"
-        ? "border-[var(--warn)] text-[var(--warn)]"
-        : "border-[var(--info)] text-[var(--info)]";
+        ? "text-[var(--warn)]"
+        : "text-[var(--info)]";
   return (
     <div
       className={cn(
-        "relative pointer-events-auto bg-[var(--surface)] border-l-4 border border-[var(--border)] rounded-lg shadow-lg px-4 py-3 pr-10 min-w-[260px] max-w-sm flex items-center gap-3 transition-all",
+        "relative pointer-events-auto flex min-w-[260px] max-w-sm items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3 pr-10 shadow-[0_8px_24px_-12px_rgba(45,52,40,0.35)] transition-all",
         tone,
         visible ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0",
       )}

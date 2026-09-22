@@ -37,30 +37,32 @@ export function QuantityStepper({
     });
   }
 
+  const buttonClass =
+    "grid size-10 cursor-pointer place-items-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-40";
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="inline-flex items-center rounded-lg border border-[var(--border)]">
       <button
         type="button"
         aria-label="Decrease quantity"
         onClick={() => step(-1)}
         disabled={qty <= 0}
-        className="size-7 grid place-items-center rounded-lg border border-[var(--border)] hover:bg-[var(--bg)] disabled:opacity-40 cursor-pointer"
+        className={buttonClass}
       >
         <Minus className="size-3.5" />
       </button>
-      <span className="text-xl font-semibold tabular-nums min-w-[2ch] text-center">
+      <span className="min-w-[3.5ch] text-center text-sm font-medium tabular-nums">
         {qty}
       </span>
+      <span className="pr-1 text-xs text-[var(--text-muted)]">{unit}</span>
       <button
         type="button"
         aria-label="Increase quantity"
         onClick={() => step(1)}
-        className="size-7 grid place-items-center rounded-lg border border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
+        className={buttonClass}
       >
         <Plus className="size-3.5" />
       </button>
-      <span className="text-sm text-[var(--text-muted)]">{unit}</span>
     </div>
   );
 }
-

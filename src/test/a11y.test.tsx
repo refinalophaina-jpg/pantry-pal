@@ -53,13 +53,12 @@ describe("accessibility (axe) — design-system primitives", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("EmptyState (decorative illustration) has no violations", async () => {
+  it("EmptyState has no violations", async () => {
     const { container } = render(
       <main>
         <EmptyState
           title="Your pantry is empty"
           description="Add your first item."
-          illustration="/illustrations/empty-pantry.svg"
           action={<Button>Add item</Button>}
         />
       </main>,

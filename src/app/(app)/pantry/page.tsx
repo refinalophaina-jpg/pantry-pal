@@ -1,6 +1,4 @@
 "use client";
-import Link from "next/link";
-import { FoodVisual } from "@/components/food-visual";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -8,8 +6,6 @@ import {
   Search,
   ScanBarcode,
   Camera,
-  Trash2,
-  Minus,
   Pencil,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
@@ -19,12 +15,12 @@ import { useSyncedActions } from "@/lib/data-sync";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/api-client";
 import {
-  Badge,
   Button,
-  Card,
   EmptyState,
   Input,
+  Label,
   Modal,
+  Segmented,
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
@@ -55,6 +51,20 @@ const CATEGORIES = [
   "Other",
 ];
 
+type ZoneFilter = StorageZone | "all";
+const ZONE_OPTIONS: { value: ZoneFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "pantry", label: "Pantry" },
+  { value: "fridge", label: "Fridge" },
+  { value: "freezer", label: "Freezer" },
+];
+
+function statusClass(tone: ReturnType<typeof expiryStatus>["tone"]) {
+  if (tone === "expired") return "text-[var(--danger)]";
+  if (tone === "today" || tone === "soon") return "text-[var(--warn)]";
+  return "text-[var(--text-muted)]";
+}
+
 export default function PantryPage() {
   const pantry = useAppStore((s) => s.pantry);
   const {
@@ -66,11 +76,11 @@ export default function PantryPage() {
   const run = useAction();
 
   const [query, setQuery] = useState("");
-  const [zone, setZone] = useState<StorageZone | "all">("all");
+  const [zone, setZone] = useState<ZoneFilter>("all");
   const [open, setOpen] = useState<"add" | "scan" | "photo" | null>(null);
   const [editing, setEditing] = useState<PantryItem | null>(null);
   const [sort, setSort] = useState<SortMode>("expiry");
-  // Drag a pantry card onto a zone button to move it there.
+  // Drag a pantry row onto a zone filter to move it there.
   const [dragId, setDragId] = useState<string | null>(null);
   const [overZone, setOverZone] = useState<StorageZone | null>(null);
 
@@ -103,21 +113,12 @@ export default function PantryPage() {
     <div>
       <PageHeader
         title="Pantry"
-        subtitle="Track what you have, where it lives, and when it expires."
         actions={
           <>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setOpen("scan")}
-            >
+            <Button variant="secondary" size="sm" onClick={() => setOpen("scan")}>
               <ScanBarcode className="size-4" /> Scan
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setOpen("photo")}
-            >
+            <Button variant="secondary" size="sm" onClick={() => setOpen("photo")}>
               <Camera className="size-4" /> Photo
             </Button>
             <Button size="sm" onClick={() => setOpen("add")}>
@@ -127,10 +128,11 @@ export default function PantryPage() {
         }
       />
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
-          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-faint)]" aria-hidden="true" />
           <Input
+            aria-label="Search pantry"
             placeholder="Search items or categories…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -138,66 +140,51 @@ export default function PantryPage() {
           />
         </div>
         <div className="flex gap-2">
-          {(["all", ...ZONES] as const).map((z) => {
-            const isDropZone = z !== "all" && dragId !== null;
-            return (
-              <Button
-                key={z}
-                variant={zone === z ? "primary" : "secondary"}
-                size="sm"
-                onClick={() => setZone(z)}
-                onDragOver={
-                  isDropZone
-                    ? (e) => {
-                        e.preventDefault();
-                        setOverZone(z as StorageZone);
-                      }
-                    : undefined
-                }
-                onDragLeave={isDropZone ? () => setOverZone(null) : undefined}
-                onDrop={
-                  isDropZone ? (e) => dropOnZone(e, z as StorageZone) : undefined
-                }
-                className={
-                  isDropZone && overZone === z
-                    ? "ring-2 ring-[var(--terracotta-q)]"
-                    : ""
-                }
-              >
-                <span className="capitalize">{z}</span>
-              </Button>
-            );
-          })}
+          <Segmented
+            label="Storage zone"
+            value={zone}
+            onChange={setZone}
+            options={ZONE_OPTIONS}
+            className="flex-1 sm:flex-none"
+            itemProps={(z) => {
+              if (z === "all" || dragId === null) return {};
+              return {
+                onDragOver: (e) => { e.preventDefault(); setOverZone(z); },
+                onDragLeave: () => setOverZone(null),
+                onDrop: (e) => dropOnZone(e, z),
+                className: overZone === z ? "ring-2 ring-[var(--terracotta-q)]" : "",
+              };
+            }}
+          />
+          <Select
+            aria-label="Sort items"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortMode)}
+            className="w-40"
+          >
+            <option value="expiry">Expiring first</option>
+            <option value="name">Name (A–Z)</option>
+            <option value="added">Recently added</option>
+          </Select>
         </div>
-        <Select
-          aria-label="Sort items"
-          value={sort}
-          onChange={(e) => setSort(e.target.value as SortMode)}
-          className="sm:w-44"
-        >
-          <option value="expiry">Expiring first</option>
-          <option value="name">Name (A–Z)</option>
-          <option value="added">Recently added</option>
-        </Select>
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
-          illustration="/illustrations/empty-pantry.svg"
           title={pantry.length === 0 ? "Your pantry is empty" : "No items match"}
           description={
             pantry.length === 0
-              ? "Add your first item, scan a barcode, or snap a photo of your groceries."
-              : "Try a different filter, or add a new pantry item."
+              ? "Add your first item, scan a barcode, or take a photo of your groceries."
+              : "Try a different search or zone."
           }
-          action={<Button onClick={() => setOpen("add")}><Plus className="size-4" /> Add item</Button>}
+          action={pantry.length === 0 ? <Button onClick={() => setOpen("add")}><Plus className="size-4" /> Add item</Button> : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <ul className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
           {filtered.map((item) => {
             const s = expiryStatus(item.expiresOn);
             return (
-              <Card
+              <li
                 key={item.id}
                 draggable
                 onDragStart={(e) => {
@@ -210,83 +197,59 @@ export default function PantryPage() {
                   setOverZone(null);
                 }}
                 className={cn(
-                  "flex flex-col gap-3 cursor-grab active:cursor-grabbing",
+                  "flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5 sm:flex-nowrap",
                   dragId === item.id && "opacity-50",
                 )}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2"><FoodVisual name={item.name} compact /><div className="font-medium">{item.name}</div></div>
-                    <div className="text-xs text-[var(--text-muted)]">
-                      {item.category} · {item.zone}
-                    </div>
+                <div className="min-w-0 flex-1 basis-40">
+                  <div className="font-medium">{item.name}</div>
+                  <div className="text-sm text-[var(--text-muted)]">
+                    {item.category} · {item.zone}
+                    {item.notes ? ` · ${item.notes}` : ""}
                   </div>
-                  <Badge tone={s.tone === "none" ? "default" : s.tone}>
-                    {s.label}
-                  </Badge>
                 </div>
-                <QuantityStepper
-                  quantity={item.quantity}
-                  unit={item.unit}
-                  onChange={(q) =>
-                    run(() => updatePantryItem(item.id, { quantity: q }), {
-                      error: "Couldn't update the quantity — try again.",
-                    })
-                  }
-                />
-                <div className="flex gap-2 mt-auto">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() =>
-                      run(() => consumeItem(item.id, 1, "used"), {
-                        success: `Used 1 ${item.unit} of ${item.name}.`,
-                        error: "Couldn't update the pantry — try again.",
+                <span className={cn("shrink-0 text-sm font-medium sm:w-28 sm:text-right", statusClass(s.tone))}>
+                  {s.label}
+                </span>
+                <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
+                  <QuantityStepper
+                    quantity={item.quantity}
+                    unit={item.unit}
+                    onChange={(q) =>
+                      run(() => updatePantryItem(item.id, { quantity: q }), {
+                        error: "Couldn't update the quantity — try again.",
                       })
                     }
-                  >
-                    <Minus className="size-3.5" /> Use 1
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() =>
-                      run(() => consumeItem(item.id, item.quantity, "wasted"), {
-                        success: `${item.name} marked wasted.`,
-                        successKind: "warn",
-                        error: "Couldn't update the pantry — try again.",
-                      })
-                    }
-                  >
-                    Wasted
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="ml-auto"
-                    onClick={() => setEditing(item)}
-                    aria-label="Edit"
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      run(() => removePantryItem(item.id), {
-                        success: `${item.name} removed.`,
-                        error: "Couldn't remove the item — try again.",
-                      })
-                    }
-                    aria-label="Delete"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                  />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        run(() => consumeItem(item.id, 1, "used"), {
+                          success: `Used 1 ${item.unit} of ${item.name}.`,
+                          error: "Couldn't update the pantry — try again.",
+                        })
+                      }
+                    >
+                      Use 1
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="px-2.5"
+                      onClick={() => setEditing(item)}
+                      aria-label="Edit"
+                      title={`Edit ${item.name}`}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                  </div>
                 </div>
-              </Card>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
 
       <AddItemModal
@@ -306,6 +269,21 @@ export default function PantryPage() {
           ? run(() => updatePantryItem(editing.id, patch), {
               success: `${editing.name} updated.`,
               error: "Couldn't save changes — try again.",
+            })
+          : Promise.resolve(false)
+        }
+        onWaste={() => editing
+          ? run(() => consumeItem(editing.id, editing.quantity, "wasted"), {
+              success: `${editing.name} marked wasted.`,
+              successKind: "warn",
+              error: "Couldn't update the pantry — try again.",
+            })
+          : Promise.resolve(false)
+        }
+        onDelete={() => editing
+          ? run(() => removePantryItem(editing.id), {
+              success: `${editing.name} removed.`,
+              error: "Couldn't remove the item — try again.",
             })
           : Promise.resolve(false)
         }
@@ -359,64 +337,71 @@ function AddItemModal({
 
   return (
     <Modal open={open} onClose={() => { if (!saving) onClose(); }} title="Add pantry item">
-      <div className="space-y-3">
-        <IngredientAutocomplete
-          autoFocus
-          placeholder="e.g. Chicken breast"
-          value={name}
-          onChange={setName}
-          onSelect={(ing) => {
-            setName(ing.name);
-            setCategory(pantryCategoryFor(ing.category));
-          }}
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            type="number"
-            min={0}
-            step="0.1"
-            placeholder="Quantity"
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
+      <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div>
+          <Label htmlFor="add-name">Ingredient name</Label>
+          <IngredientAutocomplete
+            id="add-name"
+            autoFocus
+            placeholder="e.g. Chicken breast"
+            value={name}
+            onChange={setName}
+            onSelect={(ing) => {
+              setName(ing.name);
+              setCategory(pantryCategoryFor(ing.category));
+            }}
           />
-          <Select
-            value={unit}
-            onChange={(e) => setUnit(e.target.value as UnitType)}
-          >
-            {UNITS.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </Select>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Select
-            value={zone}
-            onChange={(e) => setZone(e.target.value as StorageZone)}
-          >
-            {ZONES.map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
+          <div>
+            <Label htmlFor="add-quantity">Quantity</Label>
+            <Input
+              id="add-quantity"
+              type="number"
+              min={0}
+              step="0.1"
+              placeholder="Quantity"
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="add-unit">Unit</Label>
+            <Select id="add-unit" value={unit} onChange={(e) => setUnit(e.target.value as UnitType)}>
+              {UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="add-zone">Stored in</Label>
+            <Select id="add-zone" value={zone} onChange={(e) => setZone(e.target.value as StorageZone)}>
+              {ZONES.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="add-category">Category</Label>
+            <Select id="add-category" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
         <div>
-          <label className="text-xs text-[var(--text-muted)] block mb-1">
-            Expires on (optional)
-          </label>
+          <Label htmlFor="add-expires">Expires on (optional)</Label>
           <Input
+            id="add-expires"
             type="date"
             value={expiresOn}
             onChange={(e) => setExpiresOn(e.target.value)}
@@ -426,25 +411,9 @@ function AddItemModal({
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={saving}>{saving ? "Adding…" : "Add"}</Button>
+          <Button type="submit" disabled={saving}>{saving ? "Adding…" : "Add"}</Button>
         </div>
-      </div>
-    </Modal>
-  );
-}
-
-function ScanModal({
-  open,
-  onClose,
-  onAdd,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
-}) {
-  return (
-    <Modal open={open} onClose={onClose} title="Scan barcode">
-      {open && <ScanInner onClose={onClose} onAdd={onAdd} />}
+      </form>
     </Modal>
   );
 }
@@ -453,10 +422,14 @@ function EditItemModal({
   item,
   onClose,
   onSave,
+  onWaste,
+  onDelete,
 }: {
   item: PantryItem | null;
   onClose: () => void;
   onSave: (patch: Partial<PantryItem>) => Promise<boolean>;
+  onWaste: () => Promise<boolean>;
+  onDelete: () => Promise<boolean>;
 }) {
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -490,78 +463,118 @@ function EditItemModal({
     } finally { setSaving(false); }
   }
 
+  async function act(task: () => Promise<boolean>) {
+    if (!item || saving) return;
+    setSaving(true);
+    try {
+      const done = await task();
+      if (done) onClose();
+    } finally { setSaving(false); }
+  }
+
   return (
     <Modal open={item !== null} onClose={() => { if (!saving) onClose(); }} title="Edit item">
-      <div className="space-y-3">
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            type="number"
-            min={0}
-            step="0.1"
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
-          />
-          <Select
-            value={unit}
-            onChange={(e) => setUnit(e.target.value as UnitType)}
-          >
-            {UNITS.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </Select>
+      <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div>
+          <Label htmlFor="edit-name">Name</Label>
+          <Input id="edit-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Select
-            value={zone}
-            onChange={(e) => setZone(e.target.value as StorageZone)}
-          >
-            {ZONES.map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
+          <div>
+            <Label htmlFor="edit-quantity">Quantity</Label>
+            <Input
+              id="edit-quantity"
+              type="number"
+              min={0}
+              step="0.1"
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-unit">Unit</Label>
+            <Select id="edit-unit" value={unit} onChange={(e) => setUnit(e.target.value as UnitType)}>
+              {UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="edit-zone">Stored in</Label>
+            <Select id="edit-zone" value={zone} onChange={(e) => setZone(e.target.value as StorageZone)}>
+              {ZONES.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="edit-category">Category</Label>
+            <Select id="edit-category" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
         <div>
-          <label className="text-xs text-[var(--text-muted)] block mb-1">
-            Expires on
-          </label>
+          <Label htmlFor="edit-expires">Expires on</Label>
           <Input
+            id="edit-expires"
             type="date"
             value={expiresOn}
             onChange={(e) => setExpiresOn(e.target.value)}
           />
         </div>
         <div>
-          <label className="text-xs text-[var(--text-muted)] block mb-1">
-            Notes (optional)
-          </label>
+          <Label htmlFor="edit-notes">Notes (optional)</Label>
           <Input
+            id="edit-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="e.g. half-open, use first"
           />
         </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" disabled={saving} onClick={() => void act(onWaste)} className="text-[var(--warn)] hover:text-[var(--warn)]">
+              Mark wasted
+            </Button>
+            <Button variant="ghost" size="sm" disabled={saving} onClick={() => void act(onDelete)} className="text-[var(--danger)] hover:text-[var(--danger)]">
+              Delete
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+          </div>
         </div>
-      </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ScanModal({
+  open,
+  onClose,
+  onAdd,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onAdd: (item: Omit<PantryItem, "id" | "addedOn">) => void | Promise<void>;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} title="Scan barcode">
+      {open && <ScanInner onClose={onClose} onAdd={onAdd} />}
     </Modal>
   );
 }
@@ -708,10 +721,9 @@ function ScanInner({
             {notFound && code ? " · not in database, enter details" : ""}
           </div>
           <div>
-            <label className="text-xs text-[var(--text-muted)] block mb-1">
-              Item name
-            </label>
+            <Label htmlFor="scan-name">Item name</Label>
             <Input
+              id="scan-name"
               autoFocus
               value={product.name}
               onChange={(e) => setProduct({ ...product, name: e.target.value })}
@@ -719,10 +731,9 @@ function ScanInner({
             />
           </div>
           <div>
-            <label className="text-xs text-[var(--text-muted)] block mb-1">
-              Category
-            </label>
+            <Label htmlFor="scan-category">Category</Label>
             <Select
+              id="scan-category"
               value={product.category}
               onChange={(e) =>
                 setProduct({ ...product, category: e.target.value })
@@ -900,11 +911,10 @@ function PhotoModal({
       {detected.length === 0 ? (
         <>
           <p className="text-sm text-[var(--text-muted)] mb-3">
-            Snap or upload a photo of your groceries or fridge — it&apos;s
-            analyzed with Cloudflare Workers AI, and you confirm everything before it&apos;s
-            added.
+            Take or upload a photo of your groceries. Items are recognised
+            automatically, and you confirm each one before it is added.
           </p>
-          <label className="border-2 border-dashed border-[var(--border)] rounded-lg p-6 text-center mb-1 block cursor-pointer hover:bg-[var(--bg)] aria-disabled:opacity-60">
+          <label className="mb-1 block cursor-pointer rounded-xl border border-dashed border-[var(--border)] p-6 text-center hover:bg-[var(--bg)] aria-disabled:opacity-60">
             <Camera className="size-6 mx-auto text-[var(--text-muted)] mb-2" />
             <p className="text-sm">
               {analyzing ? "Recognizing items…" : "Tap to take or upload a photo"}
@@ -929,9 +939,9 @@ function PhotoModal({
         </>
       ) : (
         <>
-          <div className="text-xs text-[var(--text-muted)] mb-2">
-            Detected items — uncheck or edit, then add to your fridge
-          </div>
+          <p className="mb-2 text-sm text-[var(--text-muted)]">
+            Untick anything wrong, fix names, then add them to your fridge.
+          </p>
           <div className="space-y-2 max-h-[50vh] overflow-y-auto mb-3 pr-1">
             {detected.map((d, i) => (
               <div key={d.id} className="flex items-center gap-2">

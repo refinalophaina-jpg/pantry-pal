@@ -23,7 +23,7 @@ import { useAppStore, availableQuantity } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import { estimateRecipeNutrition, type RecipeNutrition } from "@/lib/nutrition";
 import { useToast } from "@/components/toast";
-import { Badge, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /** Tidy a scaled quantity: round to 2 dp and drop trailing zeros (1.5, 2, 0.33). */
@@ -136,19 +136,19 @@ export function RecipeDetail({
   return (
     <dialog ref={dialog} aria-labelledby={titleId} aria-modal="true" onCancel={e=>{e.preventDefault();onClose();}} className="fixed inset-0 z-50 m-0 h-dvh max-h-none w-screen max-w-none bg-black/60 p-4 text-[var(--text)] open:grid open:place-items-center" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div
-        className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl"
+        className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 z-10 size-11 rounded-full bg-black/40 backdrop-blur text-white grid place-items-center hover:bg-black/60 cursor-pointer"
+          className="absolute right-4 top-4 z-10 grid size-11 cursor-pointer place-items-center rounded-full bg-black/40 text-white hover:bg-black/60"
           aria-label="Close"
         >
           <X className="size-5" />
         </button>
 
         <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} />
-        <div className="px-6 pt-5"><h2 id={titleId} className="text-2xl font-semibold pr-10">{recipe.name}</h2><p className="text-sm text-[var(--text-muted)] mt-2">{recipe.description}</p></div>
+        <div className="px-6 pt-5"><h2 id={titleId} className="font-display pr-10 text-2xl">{recipe.name}</h2><p className="text-sm text-[var(--text-muted)] mt-2">{recipe.description}</p></div>
 
         <div className="p-6 sm:p-8">
 
@@ -200,13 +200,7 @@ export function RecipeDetail({
           </div>
 
           {recipe.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-5">
-              {recipe.tags.map((t) => (
-                <Badge key={t} tone="default">
-                  {t}
-                </Badge>
-              ))}
-            </div>
+            <p className="mb-5 text-sm text-[var(--text-faint)]">{recipe.tags.join(" · ")}</p>
           )}
 
           {haveTotal > 0 && (
@@ -214,16 +208,16 @@ export function RecipeDetail({
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <span className="text-[var(--text-muted)]">
                   {canCookAll
-                    ? "You have everything for this 🎉"
+                    ? "You have everything for this"
                     : "Ingredients you already have"}
                 </span>
                 <span className="font-medium">
                   {haveCount} / {haveTotal}
                 </span>
               </div>
-              <div className="h-2 bg-[var(--bg)] rounded-full overflow-hidden">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
                 <div
-                  className="h-full rounded-full bg-[var(--accent)] transition-all"
+                  className="h-full rounded-full bg-[var(--fresh)] transition-all"
                   style={{ width: `${havePct}%` }}
                 />
               </div>
@@ -272,10 +266,10 @@ export function RecipeDetail({
             )}
           </div>
 
-          <nav aria-label="Recipe connections" className="flex flex-wrap gap-4 mb-6 text-sm underline underline-offset-4 text-[var(--accent-hover)]">
-            <Link href="/shopping/" onClick={onClose} className="min-h-11 inline-flex items-center">Open shopping list</Link>
-            <Link href="/pantry/" onClick={onClose} className="min-h-11 inline-flex items-center">Check pantry</Link>
-            <Link href="/recipes/" onClick={onClose} className="min-h-11 inline-flex items-center">My recipes</Link>
+          <nav aria-label="Recipe connections" className="mb-6 flex flex-wrap gap-4 text-sm text-[var(--text-muted)] underline-offset-4">
+            <Link href="/shopping/" onClick={onClose} className="inline-flex min-h-11 items-center hover:text-[var(--text)] hover:underline">Open shopping list</Link>
+            <Link href="/pantry/" onClick={onClose} className="inline-flex min-h-11 items-center hover:text-[var(--text)] hover:underline">Check pantry</Link>
+            <Link href="/recipes/" onClick={onClose} className="inline-flex min-h-11 items-center hover:text-[var(--text)] hover:underline">My recipes</Link>
           </nav>
           <Section title="Ingredients">
             <ul className="space-y-1.5 text-sm">
@@ -299,13 +293,11 @@ export function RecipeDetail({
                       )}
                     </span>
                     {sufficient ? (
-                      <Badge tone="fresh">have</Badge>
+                      <span className="shrink-0 text-xs text-[var(--fresh)]">have</span>
                     ) : owned ? (
-                      <Badge tone="soon">
-                        only {fmtQty(owned)} {ing.unit}
-                      </Badge>
+                      <span className="shrink-0 text-xs text-[var(--warn)]">only {fmtQty(owned)} {ing.unit}</span>
                     ) : (
-                      <Badge tone="expired">missing</Badge>
+                      <span className="shrink-0 text-xs text-[var(--danger)]">missing</span>
                     )}
                   </li>
                 );
@@ -319,7 +311,7 @@ export function RecipeDetail({
             <ol className="space-y-3 text-sm">
               {recipe.steps.map((s, i) => (
                 <li key={i} className="flex gap-3">
-                  <span className="size-6 shrink-0 rounded-full bg-[var(--accent-soft)] text-[var(--accent-hover)] text-xs font-semibold grid place-items-center">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--bg)] text-xs font-medium tabular-nums text-[var(--text-muted)]">
                     {i + 1}
                   </span>
                   <span className="leading-relaxed">{s}</span>
@@ -342,9 +334,9 @@ export function RecipeDetail({
                   .map(([label, v, u]) => (
                     <div
                       key={label as string}
-                      className="text-center rounded-lg border border-[var(--border)] p-3"
+                      className="rounded-lg border border-[var(--border)] p-3 text-center"
                     >
-                      <div className="text-lg font-semibold">
+                      <div className="text-lg font-medium tabular-nums">
                         {v}
                         {u}
                       </div>
@@ -395,7 +387,7 @@ function Section({
 }) {
   return (
     <div className="mb-6 last:mb-0">
-      <h3 className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-3">
+      <h3 className="mb-3 text-sm font-medium">
         {title}
       </h3>
       {children}

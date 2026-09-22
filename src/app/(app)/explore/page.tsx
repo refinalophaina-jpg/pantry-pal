@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { FoodVisual } from "@/components/food-visual";
-import Link from "next/link";
-import { Search, Shuffle, Globe2, ChefHat } from "lucide-react";
+import { Search, Shuffle } from "lucide-react";
 import { bundledExploreRecipes, EXPLORE_CUISINES, loadExploreRecipes, shuffledRecipes } from "@/lib/explore-recipes";
 import type { Recipe } from "@/lib/types";
-import { Badge, Button, Card, Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { RecipeDetail } from "@/components/recipe-detail";
 import { CookMode } from "@/components/cook-mode";
@@ -53,7 +52,7 @@ export default function ExplorePage() {
     <div>
       <PageHeader
         title="Explore"
-        subtitle="Find your next meal in Our Kitchen and World recipes. Nutrition is shown when available."
+        subtitle="Dishes from Our Kitchen and recipes from around the world."
         actions={
           <Button
             size="sm"
@@ -65,12 +64,12 @@ export default function ExplorePage() {
         }
       />
 
-      <nav className="flex flex-wrap gap-4 mb-4 text-sm underline"><Link className="min-h-11 inline-flex items-center" href="/prep/">Low-waste three-day prep</Link><Link className="min-h-11 inline-flex items-center" href="/food-guide/">Food & nutrition guide</Link></nav>
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="relative flex-1">
-          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" aria-hidden="true" />
           <Input
-            placeholder="Search any dish — e.g. pho, butter chicken, ratatouille…"
+            aria-label="Search recipes"
+            placeholder="Search a dish, e.g. pho or ratatouille…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
@@ -87,16 +86,16 @@ export default function ExplorePage() {
           active={selection.view === "discover" && !selection.term}
           onClick={() => browse("discover")}
         >
-          <Shuffle className="size-3.5" /> Discover
+          Discover
         </Chip>
         <Chip
           active={selection.view === "kitchen" && !selection.term}
           onClick={() => browse("kitchen")}
         >
-          <ChefHat className="size-3.5" /> Our Kitchen
+          Our Kitchen
         </Chip>
         <Chip active={selection.view === "world" && !selection.term} onClick={() => browse("world")}>
-          <Globe2 className="size-3.5" /> World recipes
+          World recipes
         </Chip>
         {EXPLORE_CUISINES.map((c) => (
           <Chip
@@ -104,13 +103,13 @@ export default function ExplorePage() {
             active={selection.view === c && !selection.term}
             onClick={() => browse(c)}
           >
-            <Globe2 className="size-3.5" /> {c}
+            {c}
           </Chip>
         ))}
       </div>
 
       {selection.term && (
-        <h2 className="text-sm text-[var(--text-muted)] mb-3">
+        <h2 className="mb-3 text-sm text-[var(--text-muted)]">
           {cards.length} result{cards.length === 1 ? "" : "s"}{" "}
           for &ldquo;{selection.term}&rdquo;
         </h2>
@@ -128,11 +127,9 @@ export default function ExplorePage() {
           ))}
         </Grid>
       ) : cards.length === 0 ? (
-        <Card className="text-center py-12">
-          <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
-            No recipes found. Try a different search or cuisine.
-          </p>
-        </Card>
+        <p className="py-12 text-center text-sm text-[var(--text-muted)]">
+          No recipes found. Try a different search or cuisine.
+        </p>
       ) : (
         <Grid>
           {cards.slice(0, visible).map((r) => (
@@ -161,10 +158,10 @@ function Chip({
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium border transition-colors cursor-pointer ${
+      className={`inline-flex min-h-9 cursor-pointer items-center whitespace-nowrap rounded-full border px-3 text-sm transition-colors ${
         active
-          ? "bg-[var(--accent)] border-[var(--accent)] text-white"
-          : "bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]"
+          ? "border-[var(--text)] bg-[var(--text)] text-[var(--surface)]"
+          : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)]"
       }`}
     >
       {children}
@@ -190,20 +187,16 @@ function RecipeCard({
   return (
     <button
       onClick={onClick}
-      className="text-left group rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden hover:border-[var(--accent)] transition-colors cursor-pointer"
+      className="group cursor-pointer overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] text-left transition-colors hover:border-[var(--text-muted)]"
     >
       <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} />
       <div className="p-3">
-        <div className="font-medium text-sm line-clamp-2 group-hover:text-[var(--accent-hover)]">
+        <div className="line-clamp-2 text-sm font-medium group-hover:text-[var(--accent-hover)]">
           {recipe.name}
         </div>
-        <div className="mt-2 flex items-center gap-2 flex-wrap">
-          {recipe.cuisine && recipe.cuisine !== "International" && (
-            <Badge tone="default">{recipe.cuisine}</Badge>
-          )}
-          <span className="text-xs text-[var(--text-muted)]">
-            {recipe.id.startsWith("mealdb-") ? "About " : ""}{recipe.minutes} min
-          </span>
+        <div className="mt-1 text-xs text-[var(--text-muted)]">
+          {recipe.cuisine && recipe.cuisine !== "International" ? `${recipe.cuisine} · ` : ""}
+          {recipe.id.startsWith("mealdb-") ? "about " : ""}{recipe.minutes} min
         </div>
       </div>
     </button>
@@ -212,11 +205,11 @@ function RecipeCard({
 
 function SkeletonCard() {
   return (
-    <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden">
-      <div className="aspect-square bg-[var(--bg)] animate-pulse" />
-      <div className="p-3 space-y-2">
-        <div className="h-3 bg-[var(--bg)] rounded animate-pulse" />
-        <div className="h-3 bg-[var(--bg)] rounded animate-pulse w-2/3" />
+    <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <div className="skeleton aspect-[3/2] rounded-none" />
+      <div className="space-y-2 p-3">
+        <div className="skeleton h-3" />
+        <div className="skeleton h-3 w-2/3" />
       </div>
     </div>
   );

@@ -29,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service worker registration skips non-http origins (native shells); Actions on v5, `engines.node >= 24`, Dependabot.
 - Release-tag workflow (`.github/workflows/release.yml`): `v<version>` annotated tag plus a GitHub Release built from the CHANGELOG section, refused on a version/commit mismatch.
 
+### Changed — interface (2026-09-22 design pass)
+- Quiet, flat surfaces: the paper-grain overlay, ambient washes, hero banner, icon chips and per-navigation entrance animation are gone; the serif is reserved for page titles and body text is set at regular weight; focus rings, selection and scrollbars follow the palette.
+- Home shows the date, the household, four plain facts and three lists (cook with what you have, use soon, today's plan). The seeded "local deals", the estimated-savings figure and the quick-action buttons are removed.
+- Pantry items are rows with a stepper, Use 1 and Edit; Mark wasted and Delete live in the Edit dialog. Zones are a segmented control and every dialog field has a visible label.
+- Shopping drops the estimated cost and deal badges; groups are headed lists, the store controls collapse into one row, and low-stock filling is a plain button.
+- Recipes, Explore, Learn, Prep, Food guide and Analytics lose badges, eyebrow labels, link rows and placeholder artwork; the accent marks only the action you can take now. Sign-in has one primary action with guest access below it.
+- Navigation groups everyday destinations above browsing ones, with distinct icons and a shorter account footer.
+- Fixed: a request cancelled during first load surfaced as "signal is aborted without reason" on Shopping and Learn.
+
 ### Dependencies (2026-09-21)
 - react, react-dom and @types/react 19.3.0; date-fns 4.4.0; @vitejs/plugin-react 6.1.1; the testing and native-shell tooling groups; actions/checkout 7, setup-node 7 and upload-artifact 7 (Dependabot #2–#9).
 

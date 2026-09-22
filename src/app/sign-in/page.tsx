@@ -3,10 +3,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Input, Label } from "@/components/ui";
 
 type Mode = "signin" | "signup" | "recover" | "reset" | "verify" | "guest-recover";
 const headings: Record<Mode, string> = { signin: "Welcome back", signup: "Create an account", recover: "Reset your password", reset: "Choose a new password", verify: "Verify your email", "guest-recover": "Recover your guest pantry" };
+const leads: Record<Mode, string> = {
+  signin: "Sign in to your household.",
+  signup: "Verify your email, then create or join a household.",
+  recover: "We’ll email a reset link to this address.",
+  reset: "Use 8–128 characters.",
+  verify: "We’ll resend the verification link.",
+  "guest-recover": "Paste your saved recovery code. Recovery replaces the code and signs out its other browsers.",
+};
+
+const linkClass = "min-h-11 cursor-pointer text-sm text-[var(--text-muted)] underline-offset-4 hover:text-[var(--text)] hover:underline disabled:opacity-50";
 
 export default function SignInPage() {
   const { user, household, loading, error: sessionError, signIn, signUp, startGuest, recoverGuest, requestPasswordReset, resetPassword, resendVerification } = useAuth();
@@ -93,53 +103,59 @@ export default function SignInPage() {
 
   const needsEmail = mode !== "reset" && mode !== "guest-recover";
   const needsPassword = mode === "signin" || mode === "signup" || mode === "reset";
+  const submitLabel = busy ? "Working…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : mode === "reset" ? "Save new password" : mode === "guest-recover" ? "Recover guest account" : "Send link";
+
   return (
-    <div className="min-h-screen grid place-items-center px-4 bg-[var(--bg)]">
-      <Card className="w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-6">
+    <div className="grid min-h-screen place-items-center bg-[var(--bg)] px-4 py-10">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/illustrations/logo.svg" alt="Pantry Pal" className="size-9 rounded-xl shadow-sm" draggable={false} />
-          <div><div className="font-semibold">Pantry Pal</div><div className="text-xs text-[var(--text-muted)]">Cook more · waste less</div></div>
+          <img src="/illustrations/logo.svg" alt="" aria-hidden="true" className="size-9 rounded-lg" draggable={false} />
+          <span className="font-medium">Pantry Pal</span>
         </div>
-        <h1 className="text-xl font-semibold mb-1">{headings[mode]}</h1>
-        <p className="text-sm text-[var(--text-muted)] mb-5">
-          {mode === "signin" ? "Sign in to access your household, or start without an email." : mode === "signup" ? "Create your account, verify your email, then join or create a household." : mode === "reset" ? "Use 8–128 characters for your new password." : mode === "guest-recover" ? "Use your saved recovery code to reopen the same pantry. Recovery replaces the code and signs out its other browsers." : "Enter your account email to request a link."}
-        </p>
-        {sessionError && <div role="alert" className="text-sm mb-3 text-[var(--danger)]">{sessionError} <a href="/offline-shopping/" className="underline">Open saved shopping list</a></div>}
-        {notice && <div role="status" className="text-sm rounded-lg border border-[var(--border)] bg-[var(--accent-soft)] p-4 mb-4">{notice}</div>}
+        <h1 className="text-2xl sm:text-3xl">{headings[mode]}</h1>
+        <p className="mb-6 mt-1 text-sm text-[var(--text-muted)]">{leads[mode]}</p>
+        {sessionError && <div role="alert" className="mb-4 text-sm text-[var(--danger)]">{sessionError} <a href="/offline-shopping/" className="underline underline-offset-4">Open saved shopping list</a></div>}
+        {notice && <div role="status" className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">{notice}</div>}
         {replacementCode ? <div className="space-y-3">
-          <h2 className="font-semibold">Save your new recovery code</h2>
+          <h2 className="font-medium">Save your new recovery code</h2>
           <p className="text-sm text-[var(--text-muted)]">Your previous code no longer works. This replacement is shown only here. Anyone with this code can access your guest pantry.</p>
-          <label htmlFor="replacement-code" className="text-sm block">New guest recovery code</label>
-          <textarea id="replacement-code" readOnly value={replacementCode} autoComplete="off" spellCheck={false} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 font-mono text-sm break-all" rows={4} />
+          <Label htmlFor="replacement-code">New guest recovery code</Label>
+          <textarea id="replacement-code" readOnly value={replacementCode} autoComplete="off" spellCheck={false} className="w-full break-all rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 font-mono text-sm" rows={4} />
           {error && <div role="alert" className="text-sm text-[var(--danger)]">{error} Your replacement code is still valid; save it before leaving.</div>}
-          <Button type="button" className="w-full" onClick={copyRecoveryCode}>Copy recovery code</Button>
+          <Button type="button" variant="secondary" className="w-full" onClick={copyRecoveryCode}>Copy recovery code</Button>
           <Button type="button" className="w-full" disabled={busy} onClick={() => { setReplacementCode(""); switchMode("signin"); }}>I&apos;ve saved my recovery code</Button>
-        </div> : <form onSubmit={submit} className="space-y-3">
+        </div> : <form onSubmit={submit} className="space-y-4">
           {mode === "guest-recover" && <div>
-            <label htmlFor="guest-code" className="text-xs text-[var(--text-muted)] block mb-1">Guest recovery code</label>
+            <Label htmlFor="guest-code">Guest recovery code</Label>
             <Input id="guest-code" required maxLength={256} autoComplete="off" autoCapitalize="none" spellCheck={false} value={guestCode} onChange={(event) => setGuestCode(event.target.value)} disabled={busy} />
           </div>}
           {needsEmail && <div>
-            <label htmlFor="auth-email" className="text-xs text-[var(--text-muted)] block mb-1">Email</label>
+            <Label htmlFor="auth-email">Email</Label>
             <Input id="auth-email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} />
           </div>}
           {needsPassword && <div>
-            <label htmlFor="auth-password" className="text-xs text-[var(--text-muted)] block mb-1">{mode === "reset" ? "New password" : "Password"}</label>
+            <Label htmlFor="auth-password">{mode === "reset" ? "New password" : "Password"}</Label>
             <Input id="auth-password" type="password" required minLength={mode === "signin" ? 1 : 8} maxLength={128} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} />
           </div>}
-          {error && <div role="alert" className="text-sm text-[var(--danger)] bg-[var(--danger-soft)] rounded-lg px-3 py-2">{error}</div>}
-          <Button type="submit" className="w-full" disabled={busy}>{busy ? "Working…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : mode === "reset" ? "Save new password" : mode === "guest-recover" ? "Recover guest account" : "Send link"}</Button>
-          {mode === "signin" ? <div className="grid gap-2">
-            <Button type="button" disabled={busy || loading} onClick={beginGuest} className="w-full">Continue as guest</Button>
-            <p className="text-xs text-[var(--text-muted)]">Your pantry saves online and this browser remembers you. Create a recovery code from your account menu to return after clearing browser data or switching devices.</p>
-            <button type="button" disabled={busy} onClick={() => switchMode("guest-recover")} className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text)]">Recover a guest account</button>
-            <button type="button" disabled={busy} onClick={() => switchMode("signup")} className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text)]">Don&apos;t have an account? Sign up</button>
-            <button type="button" disabled={busy} onClick={() => switchMode("recover")} className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text)]">Forgot password?</button>
-            <button type="button" disabled={busy} onClick={() => switchMode("verify")} className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text)]">Resend verification email</button>
-          </div> : <button type="button" disabled={busy} onClick={() => switchMode("signin")} className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--text)]">Back to sign in</button>}
+          {error && <div role="alert" className="rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">{error}</div>}
+          <Button type="submit" className="w-full" disabled={busy}>{submitLabel}</Button>
+          {mode === "signin" ? <>
+            <div className="flex flex-wrap justify-center gap-x-5 gap-y-1">
+              <button type="button" disabled={busy} onClick={() => switchMode("signup")} className={linkClass}>Create an account</button>
+              <button type="button" disabled={busy} onClick={() => switchMode("recover")} className={linkClass}>Forgot password?</button>
+            </div>
+            <div className="border-t border-[var(--border)] pt-4">
+              <Button type="button" variant="secondary" disabled={busy || loading} onClick={beginGuest} className="w-full">Continue as guest</Button>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">No email needed. This browser remembers your pantry; add a recovery code later to open it elsewhere.</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-1">
+                <button type="button" disabled={busy} onClick={() => switchMode("guest-recover")} className={linkClass}>Recover a guest account</button>
+                <button type="button" disabled={busy} onClick={() => switchMode("verify")} className={linkClass}>Resend verification email</button>
+              </div>
+            </div>
+          </> : <div className="flex justify-center"><button type="button" disabled={busy} onClick={() => switchMode("signin")} className={linkClass}>Back to sign in</button></div>}
         </form>}
-      </Card>
+      </div>
     </div>
   );
 }

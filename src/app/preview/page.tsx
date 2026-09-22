@@ -2,18 +2,20 @@
 
 /*
  * Design-system gallery — an unlinked reference route (not in the nav).
- * Renders the AinaDara primitives and a few composed patterns so the look can
- * be reviewed (and screenshotted for visual regression) without signing in.
+ * Renders the primitives and a few composed patterns so the look can be
+ * reviewed (and screenshotted for visual regression) without signing in.
  */
 
-import { Refrigerator, Plus, Trash2, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   Button,
-  Card,
   Badge,
   Input,
   Select,
+  Segmented,
   EmptyState,
+  SectionTitle,
 } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -26,29 +28,31 @@ function Section({
 }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-xl">{title}</h2>
-      <div className="flex flex-wrap gap-3 items-center">{children}</div>
+      <SectionTitle>{title}</SectionTitle>
+      <div className="flex flex-wrap items-center gap-3">{children}</div>
     </section>
   );
 }
 
 export default function PreviewPage() {
+  const [zone, setZone] = useState<"all" | "pantry" | "fridge" | "freezer">("all");
   return (
     <div className="min-h-screen px-6 py-10">
-      <div className="max-w-3xl mx-auto space-y-10">
+      <div className="mx-auto max-w-3xl space-y-10">
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/illustrations/logo.svg"
-              alt="Pantry Pal"
-              className="size-10 rounded-xl shadow-sm"
+              alt=""
+              aria-hidden="true"
+              className="size-10 rounded-lg"
               draggable={false}
             />
             <div>
               <h1 className="text-2xl leading-tight">Pantry Pal — Design system</h1>
               <p className="text-sm text-[var(--text-muted)]">
-                AinaDara tokens · warm paper · terracotta / purple / moss
+                Warm paper, one terracotta accent, moss for fresh. Flat surfaces, no texture.
               </p>
             </div>
           </div>
@@ -70,7 +74,7 @@ export default function PreviewPage() {
           <Button disabled>Disabled</Button>
         </Section>
 
-        <Section title="Badges">
+        <Section title="Status">
           <Badge>default</Badge>
           <Badge tone="fresh">5d left</Badge>
           <Badge tone="soon">2d left</Badge>
@@ -80,7 +84,7 @@ export default function PreviewPage() {
         </Section>
 
         <Section title="Inputs">
-          <div className="w-full grid sm:grid-cols-2 gap-3">
+          <div className="grid w-full gap-3 sm:grid-cols-2">
             <Input placeholder="Search ingredients…" />
             <Select defaultValue="">
               <option value="" disabled>
@@ -91,43 +95,35 @@ export default function PreviewPage() {
               <option>Freezer</option>
             </Select>
           </div>
+          <Segmented
+            label="Zone"
+            value={zone}
+            onChange={setZone}
+            options={[
+              { value: "all", label: "All" },
+              { value: "pantry", label: "Pantry" },
+              { value: "fridge", label: "Fridge" },
+              { value: "freezer", label: "Freezer" },
+            ]}
+          />
         </Section>
 
-        <Section title="Cards">
-          <div className="w-full grid sm:grid-cols-2 gap-4">
-            <Card className="space-y-2">
-              <div className="flex items-center gap-2 text-[var(--accent)]">
-                <Sparkles className="size-4" />
-                <span className="font-medium text-[var(--text)]">
-                  Cook with what you have
+        <Section title="Lists">
+          <ul className="w-full divide-y divide-[var(--border)] border-y border-[var(--border)]">
+            {[
+              ["Spinach", "1 pcs · fridge", "Expires today", "text-[var(--warn)]"],
+              ["Greek yogurt", "500 g · fridge", "2d left", "text-[var(--warn)]"],
+              ["Tomatoes", "4 pcs · pantry", "5d left", "text-[var(--text-muted)]"],
+            ].map(([name, meta, status, tone]) => (
+              <li key={name} className="flex items-center justify-between gap-4 py-2.5">
+                <span>
+                  <span className="block font-medium">{name}</span>
+                  <span className="block text-sm text-[var(--text-muted)]">{meta}</span>
                 </span>
-              </div>
-              <p className="text-sm text-[var(--text-muted)]">
-                12 recipes you can make right now from your pantry.
-              </p>
-              <div className="flex gap-2 pt-1">
-                <Badge tone="fresh">8 ready</Badge>
-                <Badge tone="info">4 close</Badge>
-              </div>
-            </Card>
-            <Card className="space-y-2">
-              <div className="flex items-center gap-2 text-[var(--text)]">
-                <Refrigerator className="size-4" />
-                <span className="font-medium">Expiring soon</span>
-              </div>
-              <ul className="text-sm text-[var(--text-muted)] space-y-1">
-                <li className="flex justify-between">
-                  <span>Spinach</span> <Badge tone="today">today</Badge>
-                </li>
-                <li className="flex justify-between">
-                  <span>Greek yogurt</span> <Badge tone="soon">2d</Badge>
-                </li>
-                <li className="flex justify-between">
-                  <span>Tomatoes</span> <Badge tone="fresh">5d</Badge>
-                </li>
-              </ul>
-            </Card>
-          </div>
+                <span className={`text-sm font-medium ${tone}`}>{status}</span>
+              </li>
+            ))}
+          </ul>
         </Section>
 
         <Section title="Empty state">
@@ -135,7 +131,6 @@ export default function PreviewPage() {
             <EmptyState
               title="Your pantry is empty"
               description="Scan a barcode, snap a photo, or add items by hand to get started."
-              illustration="/illustrations/empty-pantry.svg"
               action={
                 <Button>
                   <Plus className="size-4" /> Add first item
@@ -147,13 +142,14 @@ export default function PreviewPage() {
 
         <Section title="Type scale">
           <div className="w-full space-y-1">
-            <h1 className="text-3xl">Display heading — DM Serif</h1>
-            <h2 className="text-2xl">Section heading — DM Serif</h2>
+            <h1 className="text-3xl">Page title — DM Serif Display</h1>
+            <p className="text-base font-medium">Section title — Outfit medium</p>
             <p className="text-base">
-              Body copy in Outfit, set light. Cook more, waste less — a deliberate,
+              Body copy in Outfit at regular weight. Cook more, waste less: an
               unhurried kitchen companion.
             </p>
-            <p className="font-mono text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-[var(--text-muted)]">Secondary text at 14px, muted.</p>
+            <p className="font-mono text-sm tabular-nums text-[var(--text-muted)]">
               1,240 kcal · 86 g protein · ABCD-1234 (JetBrains Mono)
             </p>
           </div>

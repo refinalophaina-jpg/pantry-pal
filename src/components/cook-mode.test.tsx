@@ -42,7 +42,7 @@ describe("CookMode", () => {
   it("shows the first step and the (required-only) deduction list", () => {
     renderCook();
     expect(screen.getByText("Boil water.")).toBeInTheDocument();
-    expect(screen.getByText("Step 1 / 2")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 2")).toBeInTheDocument();
     expect(screen.getByText("pasta")).toBeInTheDocument();
     expect(screen.getByText("−200g")).toBeInTheDocument();
     expect(screen.queryByText("garnish")).not.toBeInTheDocument(); // optional
@@ -53,7 +53,7 @@ describe("CookMode", () => {
     expect(screen.getByRole("button", { name: /back/i })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: /next/i }));
     expect(screen.getByText("Add pasta.")).toBeInTheDocument();
-    expect(screen.getByText("Step 2 / 2")).toBeInTheDocument();
+    expect(screen.getByText("Step 2 of 2")).toBeInTheDocument();
   });
 
   it("blocks finishing until every step is marked done, then cooks", async () => {

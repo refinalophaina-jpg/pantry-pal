@@ -28,6 +28,7 @@ export function IngredientAutocomplete({
   onSelect,
   placeholder,
   autoFocus,
+  id,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -35,6 +36,8 @@ export function IngredientAutocomplete({
   onSelect?: (ingredient: Ingredient) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Lets a visible <label htmlFor> name the input. */
+  id?: string;
 }) {
   const [results, setResults] = useState<Ingredient[]>([]);
   const [open, setOpen] = useState(false);
@@ -105,6 +108,7 @@ export function IngredientAutocomplete({
   return (
     <div ref={boxRef} className="relative">
       <Input
+        id={id}
         autoFocus={autoFocus}
         placeholder={placeholder}
         value={value}

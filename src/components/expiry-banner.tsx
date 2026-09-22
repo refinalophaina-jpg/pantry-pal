@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bell, BellOff, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { Button, Card } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { daysUntil } from "@/lib/utils";
 import { useMounted } from "@/lib/use-mounted";
 
@@ -83,24 +83,25 @@ export function ExpiryBanner() {
   }
 
   return (
-    <Card className="mb-4 border-[var(--warn)] bg-[var(--warn-soft)] relative">
+    <div
+      role="status"
+      className="relative mb-6 rounded-xl border border-[var(--warn)] bg-[var(--warn-soft)] px-4 py-3 pr-12 sm:px-5"
+    >
       <button
+        type="button"
         onClick={dismiss}
-        className="absolute right-3 top-3 text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer"
+        className="absolute right-1.5 top-1.5 grid size-9 place-items-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text)]"
         aria-label="Dismiss"
       >
         <X className="size-4" />
       </button>
-      <div className="flex items-start gap-3 pr-6">
-        <div className="size-9 rounded-lg grid place-items-center bg-[var(--warn)] text-white shrink-0">
-          <AlertTriangle className="size-5" />
-        </div>
-        <div className="flex-1">
-          <div className="font-semibold text-[var(--warn)]">
-            {urgent.length} item{urgent.length === 1 ? " needs" : "s need"}{" "}
-            attention
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--warn)]" aria-hidden="true" />
+        <div className="min-w-0 text-sm">
+          <div className="font-medium">
+            {urgent.length} item{urgent.length === 1 ? " needs" : "s need"} attention
           </div>
-          <div className="text-sm text-[var(--text)] mt-0.5">
+          <div className="mt-0.5 text-[var(--text-muted)]">
             {urgent
               .slice(0, 3)
               .map(({ p, d }) => {
@@ -116,23 +117,17 @@ export function ExpiryBanner() {
             {urgent.length > 3 && ` · +${urgent.length - 3} more`}
           </div>
           {permission === "default" && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={enableNotifications}
-              className="mt-3"
-            >
+            <Button variant="secondary" size="sm" onClick={enableNotifications} className="mt-3">
               <Bell className="size-3.5" /> Enable browser alerts
             </Button>
           )}
           {permission === "denied" && (
-            <div className="text-xs text-[var(--text-muted)] mt-3 flex items-center gap-1">
-              <BellOff className="size-3.5" /> Browser alerts blocked — enable
-              in site settings.
+            <div className="mt-2 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+              <BellOff className="size-3.5" /> Browser alerts blocked — enable in site settings.
             </div>
           )}
         </div>
       </div>
-    </Card>
+    </div>
   );
 }

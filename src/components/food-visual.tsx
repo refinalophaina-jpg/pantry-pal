@@ -2,7 +2,12 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { Bean, Carrot, Cherry, Egg, Fish, Leaf, Milk, Wheat, CookingPot, Apple, Banana, Nut } from 'lucide-react';
-/** Lightweight subject illustrations, never a stock photo masquerading as the dish. */
+
+/**
+ * A recipe or food's picture when it has one; otherwise a quiet subject mark
+ * (one line icon, or the kitchen's own drawn bowl for its prep dishes).
+ * Never a stock photo standing in for the dish.
+ */
 export function FoodVisual({ name, imageUrl, compact = false }: { name: string; imageUrl?: string; compact?: boolean }) {
   const [failed, setFailed] = useState(false);
   const text = name.toLowerCase();
@@ -10,17 +15,15 @@ export function FoodVisual({ name, imageUrl, compact = false }: { name: string; 
   const dish = /inspired|dal|bowls|jars|noodles|spaghetti|soup|stir.fry|curry/.test(text);
   let source = imageUrl;
   if (source?.startsWith('https://www.themealdb.com/images/media/meals/') && !/\/(small|medium|large)$/.test(source)) source += '/medium';
-  return <div className={`relative overflow-hidden ${compact ? 'size-11 shrink-0 rounded-xl' : 'aspect-[16/9] w-full rounded-xl'} bg-[var(--accent-soft)]`}>
-    {source && !failed ? <Image src={source} alt={name} fill sizes={compact ? '44px' : '(max-width: 640px) 100vw, 400px'} className="object-cover" unoptimized loading="lazy" onError={() => setFailed(true)} /> : <div className="absolute inset-0 flex items-center justify-center gap-5 text-[var(--accent-hover)]" role="img" aria-label={`${name}, subject illustration`}>
-      {!compact && <span className="absolute -right-8 -top-12 size-48 rounded-full border-[24px] border-[var(--surface)] opacity-30" />}
-      {dish ? <DishArt name={text} compact={compact} /> : <Icon strokeWidth={1.25} className={compact ? 'size-6' : 'size-20'} />}
-      {!compact && <span className="absolute bottom-3 left-4 text-[10px] uppercase tracking-widest opacity-70">Kitchen illustration</span>}
+  return <div className={`relative overflow-hidden ${compact ? 'size-10 shrink-0 rounded-lg' : 'aspect-[3/2] w-full rounded-lg'} bg-[var(--bg)]`}>
+    {source && !failed ? <Image src={source} alt={name} fill sizes={compact ? '40px' : '(max-width: 640px) 100vw, 400px'} className="object-cover" unoptimized loading="lazy" onError={() => setFailed(true)} /> : <div className="absolute inset-0 flex items-center justify-center text-[var(--text-faint)]" role="img" aria-label={`${name}, subject mark`}>
+      {dish ? <DishArt name={text} compact={compact} /> : <Icon strokeWidth={1.25} className={compact ? 'size-5' : 'size-10'} />}
     </div>}
   </div>;
 }
 
 function DishArt({name,compact}:{name:string;compact:boolean}) {
-  if (/oat|jars/.test(name)) return <svg viewBox="0 0 240 150" className={compact ? 'size-11' : 'w-4/5 max-h-[90%]'} aria-hidden="true">
+  if (/oat|jars/.test(name)) return <svg viewBox="0 0 240 150" className={compact ? 'size-10' : 'w-3/5 max-h-[80%]'} aria-hidden="true">
     <ellipse cx="120" cy="134" rx="64" ry="9" fill="#4b5847" opacity=".12"/>
     <path d="M75 28H165V122Q165 134 150 134H90Q75 134 75 122Z" fill="#f8f4df" stroke="#68765b" strokeWidth="2"/>
     <path d="M79 69H161V119Q161 129 148 129H92Q79 129 79 119Z" fill="#d6bf8b"/>
@@ -35,7 +38,7 @@ function DishArt({name,compact}:{name:string;compact:boolean}) {
   const tofu = /tofu/.test(name);
   const grain = /oat|quinoa|rice/.test(name);
   const sauce = red ? '#b9533c' : golden ? '#d6aa47' : '#87a178';
-  return <svg viewBox="0 0 240 150" className={compact ? 'size-11' : 'w-4/5 max-h-[90%]'} aria-hidden="true">
+  return <svg viewBox="0 0 240 150" className={compact ? 'size-10' : 'w-3/5 max-h-[80%]'} aria-hidden="true">
     <ellipse cx="120" cy="128" rx="86" ry="11" fill="#4b5847" opacity=".12"/>
     <path d="M29 66 Q35 130 120 133 Q205 130 211 66Z" fill="#ece7d6" stroke="#68765b" strokeWidth="2"/>
     <ellipse cx="120" cy="67" rx="92" ry="43" fill="#faf8ee" stroke="#68765b" strokeWidth="2"/>

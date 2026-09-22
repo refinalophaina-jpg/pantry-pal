@@ -1,32 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  CalendarRange,
-  ExternalLink,
-  MapPin,
-  PackageCheck,
-  Plus,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { MapPin, PackageCheck, Plus, Trash2 } from "lucide-react";
 import { startOfWeek, addDays, format } from "date-fns";
 import { useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Badge,
   Button,
-  Card,
   EmptyState,
   Input,
+  Label,
   Modal,
+  SectionTitle,
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/toast";
-import { dealSearchUrl, fmtDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   listStores,
   addStore,
@@ -50,9 +42,14 @@ function currentWeekDates(): string[] {
   );
 }
 
+// A request cancelled by navigation or an identity change is not an error
+// the person needs to hear about.
+function isAbort(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export default function ShoppingPage() {
   const shopping = useAppStore((s) => s.shopping);
-  const deals = useAppStore((s) => s.deals);
   const recipes = useAppStore((s) => s.recipes);
   const pantry = useAppStore((s) => s.pantry);
   const {
@@ -73,7 +70,7 @@ export default function ShoppingPage() {
       toast(
         n > 0
           ? `Added ${n} item${n === 1 ? "" : "s"} you still need this week.`
-          : "You're already stocked for this week's plan 🎉",
+          : "You already have everything this week's plan needs.",
         n > 0 ? "success" : "info",
       );
     } catch (e) {
@@ -105,6 +102,7 @@ export default function ShoppingPage() {
   const [activeStoreId, setActiveStoreId] = useState<string>("");
   const [locations, setLocations] = useState<ItemLocation[]>([]);
   const [editItem, setEditItem] = useState<string | null>(null);
+  const [addingStore, setAddingStore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,7 +110,7 @@ export default function ShoppingPage() {
     setLocations([]);
     setActiveStoreId("");
     if (household) listStores(household.id).then((items) => { if (!cancelled) setStores(items); }).catch((error) => {
-      if (!cancelled) toast(error instanceof Error ? error.message : "Could not load your stores.", "warn");
+      if (!cancelled && !isAbort(error)) toast(error instanceof Error ? error.message : "Could not load your stores.", "warn");
     });
     return () => { cancelled = true; };
   }, [household?.id, user?.id, toast]);
@@ -122,11 +120,14 @@ export default function ShoppingPage() {
     setLocations([]);
     if (household && activeStoreId) listItemLocations(household.id, activeStoreId)
       .then((items) => { if (!cancelled) setLocations(items); })
-      .catch((error) => { if (!cancelled) toast(error instanceof Error ? error.message : "Could not load this store's layout.", "warn"); });
+      .catch((error) => { if (!cancelled && !isAbort(error)) toast(error instanceof Error ? error.message : "Could not load this store's layout.", "warn"); });
     return () => { cancelled = true; };
   }, [household?.id, user?.id, activeStoreId, toast]);
 
   const activeStore = stores.find((s) => s.id === activeStoreId);
+  const suggestedStores = SUGGESTED_STORES.filter(
+    (s) => !stores.some((st) => st.name.toLowerCase() === s.toLowerCase()),
+  );
 
   function quickAddStore(storeName: string) {
     if (!household || !user) return;
@@ -137,6 +138,7 @@ export default function ShoppingPage() {
           [...arr, s].sort((a, b) => a.name.localeCompare(b.name)),
         );
         setActiveStoreId(s.id);
+        setAddingStore(false);
       },
       { success: `${storeName} added.`, error: "Couldn't add the store." },
     );
@@ -182,11 +184,14 @@ export default function ShoppingPage() {
     }
   }
 
-  function smartFillFromExpiring() {
+  function addLowStock() {
     const candidates = pantry
       .filter((p) => p.quantity <= 2 || (p.quantity <= 200 && p.unit === "g"))
       .slice(0, 6);
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) {
+      toast("Nothing in the pantry is running low.", "info");
+      return;
+    }
     run(
       async () => {
         // sequential so concurrent inserts don't race
@@ -206,17 +211,6 @@ export default function ShoppingPage() {
     );
   }
 
-  const enriched = useMemo(
-    () =>
-      shopping.map((s) => {
-        const deal = deals.find(
-          (d) => d.item.toLowerCase() === s.name.toLowerCase(),
-        );
-        return { ...s, deal };
-      }),
-    [shopping, deals],
-  );
-
   const locByName = useMemo(() => {
     const m = new Map<string, ItemLocation>();
     locations.forEach((l) => m.set(l.item_name.toLowerCase(), l));
@@ -225,8 +219,8 @@ export default function ShoppingPage() {
 
   // Group by store aisle when a store is selected, else by category.
   const grouped = useMemo(() => {
-    const g: Record<string, typeof enriched> = {};
-    enriched.forEach((it) => {
+    const g: Record<string, typeof shopping> = {};
+    shopping.forEach((it) => {
       const key = activeStoreId
         ? locByName.get(it.name.toLowerCase())?.aisle?.trim() || "Unsorted"
         : it.category;
@@ -234,7 +228,7 @@ export default function ShoppingPage() {
       g[key].push(it);
     });
     return g;
-  }, [enriched, activeStoreId, locByName]);
+  }, [shopping, activeStoreId, locByName]);
 
   const groupOrder = useMemo(() => {
     const keys = Object.keys(grouped);
@@ -246,283 +240,228 @@ export default function ShoppingPage() {
     });
   }, [grouped, activeStoreId]);
 
-  const estimatedTotal = enriched.reduce(
-    (sum, it) => sum + (it.deal?.price ?? 3.5) * it.quantity,
-    0,
-  );
-  const dealSavings = enriched.reduce(
-    (sum, it) => sum + (it.deal ? (3.5 - it.deal.price) * it.quantity : 0),
-    0,
-  );
+  const anyDone = shopping.some((e) => e.done);
 
   return (
     <div>
       <PageHeader
         title="Shopping list"
-        subtitle="What you still need — built from this week's meal plan and your pantry."
+        subtitle="Built from this week's meal plan and what is already in your pantry."
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={buildWeek}>
-              <CalendarRange className="size-4" /> Build week&apos;s list
+              Build week&apos;s list
             </Button>
-            <Button variant="secondary" size="sm" onClick={smartFillFromExpiring}>
-              <Sparkles className="size-4" /> Smart fill
+            <Button variant="secondary" size="sm" onClick={addLowStock}>
+              Add low stock
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                run(() => clearCompleted(), {
-                  error: "Couldn't clear items — try again.",
-                })
-              }
-              disabled={!enriched.some((e) => e.done)}
-            >
-              Clear done
-            </Button>
+            {anyDone && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  run(() => clearCompleted(), {
+                    error: "Couldn't clear items — try again.",
+                  })
+                }
+              >
+                Clear done
+              </Button>
+            )}
           </>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <div className="flex flex-col sm:flex-row gap-2">
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-12">
+        <div className="space-y-6">
+          <form
+            className="flex flex-col gap-2 sm:flex-row"
+            onSubmit={(e) => { e.preventDefault(); void addQuick(); }}
+          >
+            <Input
+              aria-label="Shopping item name"
+              placeholder="Add an item…"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="flex-1"
+            />
+            <div className="flex gap-2">
               <Input
-                aria-label="Shopping item name"
-                placeholder="Add an item…"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addQuick()}
-                className="flex-1"
+                aria-label="Shopping quantity"
+                type="number"
+                min={0}
+                className="w-20"
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
               />
-              <div className="flex gap-2">
-                <Input
-                  aria-label="Shopping quantity"
-                  type="number"
-                  className="w-20"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Number(e.target.value))}
-                />
-                <Select
-                  aria-label="Shopping unit"
-                  className="w-20"
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value as UnitType)}
-                >
-                  {UNITS.map((u) => (
-                    <option key={u}>{u}</option>
-                  ))}
-                </Select>
-                <Button onClick={addQuick} aria-label="Add shopping item">
-                  <Plus className="size-4" />
-                </Button>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-[var(--text-muted)]">
-                Shopping at
-              </span>
               <Select
-                aria-label="Shopping store"
-                className="w-44"
-                value={activeStoreId}
-                onChange={(e) => setActiveStoreId(e.target.value)}
+                aria-label="Shopping unit"
+                className="w-24"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value as UnitType)}
               >
-                <option value="">By category</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
+                {UNITS.map((u) => (
+                  <option key={u}>{u}</option>
                 ))}
               </Select>
-              {activeStore && (
-                <a
-                  href={storeFinderUrl(
-                    activeStore.name,
-                    activeStore.zip || "77056",
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-[var(--accent-hover)] hover:underline"
-                >
-                  <MapPin className="size-3.5" /> Find near{" "}
-                  {activeStore.zip || "me"}
-                </a>
-              )}
+              <Button type="submit" aria-label="Add shopping item" className="px-3">
+                <Plus className="size-4" />
+                <span className="sm:hidden">Add</span>
+              </Button>
             </div>
-            {SUGGESTED_STORES.filter(
-              (s) =>
-                !stores.some(
-                  (st) => st.name.toLowerCase() === s.toLowerCase(),
-                ),
-            ).length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-[var(--text-muted)]">
-                  Add a store:
-                </span>
-                {SUGGESTED_STORES.filter(
-                  (s) =>
-                    !stores.some(
-                      (st) => st.name.toLowerCase() === s.toLowerCase(),
-                    ),
-                ).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => quickAddStore(s)}
-                    className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs hover:border-[var(--accent)] transition-colors"
-                  >
-                    + {s}
-                  </button>
+          </form>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+            <label htmlFor="shopping-store" className="text-[var(--text-muted)]">Group by</label>
+            <Select
+              id="shopping-store"
+              aria-label="Shopping store"
+              className="w-44"
+              value={activeStoreId}
+              onChange={(e) => setActiveStoreId(e.target.value)}
+            >
+              <option value="">Category</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} (aisle)
+                </option>
+              ))}
+            </Select>
+            {activeStore && (
+              <a
+                href={storeFinderUrl(activeStore.name, activeStore.zip || "77056")}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center gap-1 text-[var(--text-muted)] underline-offset-4 hover:text-[var(--text)] hover:underline"
+              >
+                <MapPin className="size-3.5" aria-hidden="true" /> Find near {activeStore.zip || "me"}
+              </a>
+            )}
+            {suggestedStores.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setAddingStore((v) => !v)}
+                aria-expanded={addingStore}
+                className="min-h-11 text-[var(--text-muted)] underline-offset-4 hover:text-[var(--text)] hover:underline"
+              >
+                {addingStore ? "Cancel" : "Add a store"}
+              </button>
+            )}
+            {addingStore && (
+              <div className="flex w-full flex-wrap gap-2">
+                {suggestedStores.map((s) => (
+                  <Button key={s} variant="secondary" size="sm" onClick={() => quickAddStore(s)}>
+                    <Plus className="size-3.5" /> {s}
+                  </Button>
                 ))}
               </div>
             )}
-            {activeStoreId && (
-              <p className="text-[11px] text-[var(--text-muted)] mt-2">
-                Grouped by aisle. Tap the pin on an item to record its aisle,
-                shelf and price here — remembered for next time.
-              </p>
-            )}
-          </Card>
+          </div>
+          {activeStoreId && (
+            <p className="text-sm text-[var(--text-muted)]">
+              Grouped by aisle. Use the pin on an item to record its aisle, shelf and price for next time.
+            </p>
+          )}
 
-          {enriched.length === 0 ? (
+          {shopping.length === 0 ? (
             <EmptyState
-              illustration="/illustrations/empty-shopping.svg"
-              title="Nothing on the list yet"
-              description="Hit “Build week's list” to pull everything this week's meal plan needs that you don't already have — or add items by hand."
+              title="Nothing on the list"
+              description="Build it from this week's meal plan, or add items above."
+              action={<Button variant="secondary" onClick={buildWeek}>Build week&apos;s list</Button>}
             />
           ) : (
-            groupOrder.map((cat) => {
-              const items = grouped[cat];
-              return (
-              <Card key={cat}>
-                <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-3">
-                  {activeStoreId
-                    ? cat === "Unsorted"
-                      ? "Unsorted — set aisles"
-                      : `Aisle ${cat}`
-                    : cat}
-                </div>
-                <ul className="space-y-2">
-                  {items.map((it) => (
-                    <li
-                      key={it.id}
-                      className="flex items-center gap-2 group"
-                    >
-                      <label className="size-11 shrink-0 inline-flex items-center justify-center">
-                        <input
-                        type="checkbox"
-                        aria-label={`Mark ${it.name} as purchased`}
-                        checked={it.done}
-                        onChange={() =>
-                          run(() => toggleShoppingItem(it.id), {
-                            error: "Couldn't update the item — try again.",
-                          })
-                        }
-                        className="size-4 accent-[var(--accent)]"
-                        />
-                      </label>
-                      <div className="flex-1 min-w-0 break-words">
-                        <div
-                          className={`text-sm ${
-                            it.done
-                              ? "line-through text-[var(--text-muted)]"
-                              : ""
-                          }`}
-                        >
-                          {it.name}{" "}
-                          <span className="text-[var(--text-muted)]">
-                            · {it.quantity}
-                            {it.unit}
-                          </span>
-                          {it.fromRecipe && (
-                            <span className="text-xs text-[var(--text-muted)] ml-2">
-                              from {it.fromRecipe}
-                            </span>
+            <div className="space-y-6">
+              {groupOrder.map((cat) => (
+                <section key={cat} aria-label={cat}>
+                  <h2 className="mb-1 text-sm font-medium text-[var(--text-muted)]">
+                    {activeStoreId
+                      ? cat === "Unsorted"
+                        ? "No aisle yet"
+                        : `Aisle ${cat}`
+                      : cat}
+                  </h2>
+                  <ul className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
+                    {grouped[cat].map((it) => {
+                      const price = activeStoreId ? locByName.get(it.name.toLowerCase())?.price : null;
+                      return (
+                        <li key={it.id} className="flex items-center gap-1 py-0.5">
+                          <label className="inline-flex size-11 shrink-0 items-center justify-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Mark ${it.name} as purchased`}
+                              checked={it.done}
+                              onChange={() =>
+                                run(() => toggleShoppingItem(it.id), {
+                                  error: "Couldn't update the item — try again.",
+                                })
+                              }
+                              className="size-4 accent-[var(--accent)]"
+                            />
+                          </label>
+                          <div className={cn("min-w-0 flex-1 break-words text-sm", it.done && "text-[var(--text-muted)] line-through")}>
+                            <span className="font-medium">{it.name}</span>
+                            <span className="text-[var(--text-muted)]"> · {it.quantity} {it.unit}</span>
+                            {it.fromRecipe && (
+                              <span className="block text-xs text-[var(--text-muted)]">for {it.fromRecipe}</span>
+                            )}
+                          </div>
+                          {price != null && (
+                            <span className="shrink-0 text-sm tabular-nums text-[var(--text-muted)]">${price.toFixed(2)}</span>
                           )}
-                        </div>
-                      </div>
-                      {activeStoreId &&
-                        locByName.get(it.name.toLowerCase())?.price != null && (
-                          <Badge tone="fresh">
-                            $
-                            {locByName
-                              .get(it.name.toLowerCase())!
-                              .price!.toFixed(2)}
-                          </Badge>
-                        )}
-                      {it.deal && (
-                        <Badge tone="fresh">
-                          {it.deal.store} ${it.deal.price.toFixed(2)}
-                        </Badge>
-                      )}
-                      {activeStoreId && (
-                        <button
-                          onClick={() => setEditItem(it.name)}
-                          className="size-11 shrink-0 inline-flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100 text-[var(--text-muted)] hover:text-[var(--accent-hover)]"
-                          aria-label="Set aisle / shelf / price"
-                          title="Set aisle / shelf / price"
-                        >
-                          <MapPin className="size-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => moveToPantry(it)}
-                        className="size-11 shrink-0 inline-flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100 text-[var(--text-muted)] hover:text-[var(--accent-hover)]"
-                        aria-label="Got it — move to pantry"
-                        title="Got it — move to pantry"
-                      >
-                        <PackageCheck className="size-4" />
-                      </button>
-                      <button
-                        onClick={() =>
-                          run(() => removeShoppingItem(it.id), {
-                            error: "Couldn't remove the item — try again.",
-                          })
-                        }
-                        className="size-11 shrink-0 inline-flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100 text-[var(--text-muted)] hover:text-[var(--danger)]"
-                        aria-label="Remove"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-              );
-            })
+                          {activeStoreId && (
+                            <button
+                              type="button"
+                              onClick={() => setEditItem(it.name)}
+                              className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--bg)] hover:text-[var(--text)]"
+                              aria-label="Set aisle / shelf / price"
+                              title="Set aisle, shelf and price"
+                            >
+                              <MapPin className="size-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => moveToPantry(it)}
+                            className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--bg)] hover:text-[var(--text)]"
+                            aria-label="Got it — move to pantry"
+                            title="Got it: move to pantry"
+                          >
+                            <PackageCheck className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              run(() => removeShoppingItem(it.id), {
+                                error: "Couldn't remove the item — try again.",
+                              })
+                            }
+                            className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--bg)] hover:text-[var(--danger)]"
+                            aria-label="Remove"
+                            title="Remove from list"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ))}
+            </div>
           )}
         </div>
 
-        <div className="space-y-4">
-          <Card>
-            <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-3">
-              Estimated cost
-            </div>
-            <div className="text-3xl font-semibold">
-              ${estimatedTotal.toFixed(2)}
-            </div>
-            {dealSavings > 0 && (
-              <div className="text-xs text-[var(--accent-hover)] mt-1">
-                ↓ ${dealSavings.toFixed(2)} saved via deals
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-3">
-              Generate from recipe
-            </div>
-            <div className="space-y-2">
-              {recipes.slice(0, 4).map((r) => (
-                <Button
-                  key={r.id}
-                  variant="secondary"
-                  size="sm"
-                  className="w-full justify-start"
+        <aside>
+          <SectionTitle>From a recipe</SectionTitle>
+          <p className="mb-2 text-sm text-[var(--text-muted)]">
+            Adds the ingredients you don&apos;t have yet.
+          </p>
+          <ul className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
+            {recipes.slice(0, 5).map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 py-2 text-left text-sm hover:text-[var(--accent-hover)]"
                   onClick={() =>
                     run(() => generateFromRecipe(r.id), {
                       success: `Missing ingredients for ${r.name} added.`,
@@ -530,47 +469,13 @@ export default function ShoppingPage() {
                     })
                   }
                 >
-                  {r.name}
-                </Button>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-3">
-              Local deals
-            </div>
-            <ul className="space-y-1">
-              {deals.map((d) => (
-                <li key={d.id}>
-                  <a
-                    href={dealSearchUrl(d.item, d.store)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex justify-between gap-2 rounded-lg -mx-2 px-2 py-1.5 text-sm hover:bg-[var(--bg)] transition-colors"
-                    title={`Compare prices for ${d.item}`}
-                  >
-                    <div className="min-w-0">
-                      <div className="font-medium flex items-center gap-1">
-                        {d.item}
-                        <ExternalLink className="size-3 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                      <div className="text-xs text-[var(--text-muted)]">
-                        {d.store} · until {fmtDate(d.validUntil)}
-                      </div>
-                    </div>
-                    <span className="font-semibold whitespace-nowrap">
-                      ${d.price.toFixed(2)}
-                      <span className="text-xs font-normal text-[var(--text-muted)]">
-                        /{d.unit}
-                      </span>
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
+                  <span className="min-w-0 truncate">{r.name}</span>
+                  <Plus className="size-4 shrink-0 text-[var(--text-faint)]" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </aside>
       </div>
 
       {editItem && (
@@ -606,41 +511,21 @@ function LocationEditor({
     current?.price != null ? String(current.price) : "",
   );
   return (
-    <Modal open onClose={onClose} title={`Where is "${itemName}"?`}>
-      <div className="space-y-3">
+    <Modal open onClose={onClose} title={`Where is ${itemName}?`}>
+      <div className="space-y-4">
         <div className="flex gap-3">
           <div className="flex-1">
-            <label className="text-xs text-[var(--text-muted)] block mb-1">
-              Aisle
-            </label>
-            <Input
-              value={aisle}
-              onChange={(e) => setAisle(e.target.value)}
-              placeholder="e.g. 7"
-            />
+            <Label htmlFor="loc-aisle">Aisle</Label>
+            <Input id="loc-aisle" value={aisle} onChange={(e) => setAisle(e.target.value)} placeholder="e.g. 7" />
           </div>
           <div className="flex-1">
-            <label className="text-xs text-[var(--text-muted)] block mb-1">
-              Shelf / section
-            </label>
-            <Input
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-              placeholder="e.g. top shelf, end cap"
-            />
+            <Label htmlFor="loc-section">Shelf or section</Label>
+            <Input id="loc-section" value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. top shelf" />
           </div>
         </div>
         <div>
-          <label className="text-xs text-[var(--text-muted)] block mb-1">
-            Price ($)
-          </label>
-          <Input
-            type="number"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="e.g. 3.49"
-            className="w-32"
-          />
+          <Label htmlFor="loc-price">Price ($)</Label>
+          <Input id="loc-price" type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 3.49" className="w-32" />
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>

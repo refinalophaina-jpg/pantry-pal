@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ChefHat, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { Recipe } from "@/lib/types";
 import { useSyncedActions } from "@/lib/data-sync";
-import { Badge, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
@@ -58,14 +58,12 @@ export function CookMode({
           <X className="size-5" />
         </button>
         <div className="flex-1 min-w-0">
-          <div className="text-xs text-[var(--text-muted)] flex items-center gap-1">
-            <ChefHat className="size-3" /> Cook mode
-          </div>
-          <div className="font-semibold truncate">{recipe.name}</div>
+          <div className="text-xs text-[var(--text-muted)]">Cook mode</div>
+          <div className="truncate font-medium">{recipe.name}</div>
         </div>
-        <Badge tone="info">
-          Step {Math.min(step + 1, total)} / {total}
-        </Badge>
+        <span className="shrink-0 text-sm tabular-nums text-[var(--text-muted)]">
+          Step {Math.min(step + 1, total)} of {total}
+        </span>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 max-w-3xl mx-auto w-full">
@@ -91,8 +89,8 @@ export function CookMode({
           ))}
         </div>
 
-        <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-6 sm:p-8 mb-6">
-          <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-2">
+        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 sm:p-8">
+          <div className="mb-2 text-sm text-[var(--text-muted)]">
             Step {step + 1}
           </div>
           <p className="text-xl sm:text-2xl leading-relaxed">
@@ -112,9 +110,9 @@ export function CookMode({
           </button>
         </div>
 
-        <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-5">
-          <div className="text-xs uppercase tracking-wide text-[var(--text-muted)] mb-3">
-            Will deduct from pantry
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+          <div className="mb-3 text-sm font-medium">
+            Taken from the pantry when you finish
           </div>
           <ul className="space-y-1.5 text-sm">
             {recipe.ingredients

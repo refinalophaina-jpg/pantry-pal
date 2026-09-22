@@ -4,7 +4,6 @@ import {
   daysUntil,
   expiryStatus,
   fmtDate,
-  dealSearchUrl,
   uid,
   todayISO,
   addDays,
@@ -70,12 +69,6 @@ describe("pure formatters", () => {
   it("fmtDate renders a short month/day", () => {
     expect(fmtDate("2026-05-31")).toBe("May 31");
     expect(fmtDate("2026-01-01")).toBe("Jan 1");
-  });
-
-  it("dealSearchUrl builds a Google Shopping query, url-encoded", () => {
-    const url = dealSearchUrl("oat milk", "H-E-B");
-    expect(url.startsWith("https://www.google.com/search?tbm=shop&q=")).toBe(true);
-    expect(url).toContain(encodeURIComponent("oat milk H-E-B"));
   });
 
   it("uid returns distinct non-empty ids", () => {

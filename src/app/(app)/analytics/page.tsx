@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { ChefHat, Leaf, TrendingDown, Wallet } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { Badge, Card } from "@/components/ui";
+import { SectionTitle } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { useMounted } from "@/lib/use-mounted";
 import { format, parseISO, subDays } from "date-fns";
+import { cn } from "@/lib/utils";
 
 export default function AnalyticsPage() {
   const usage = useAppStore((s) => s.usage);
@@ -16,7 +16,6 @@ export default function AnalyticsPage() {
   const cooked = usage.filter((u) => u.reason === "used").length;
   const wasted = usage.filter((u) => u.reason === "wasted").length;
   const wasteRate = cooked + wasted === 0 ? 0 : wasted / (cooked + wasted);
-  const savedEstimate = cooked * 7.5;
 
   const byCategory = useMemo(() => {
     const c: Record<string, number> = {};
@@ -47,192 +46,129 @@ export default function AnalyticsPage() {
   }, [mounted, mealPlan]);
 
   const maxCount = Math.max(1, ...last14Days.map((d) => d.count));
+  const plannedMeals = last14Days.reduce((s, d) => s + d.count, 0);
 
   return (
     <div>
       <PageHeader
         title="Analytics"
-        subtitle="Trends in how you cook, shop, and store."
+        subtitle="How you cook, shop and store, from what the app has tracked."
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Stat
-          icon={<Wallet className="size-4" />}
-          tone="info"
-          label="Estimated saved"
-          value={`$${savedEstimate.toFixed(0)}`}
-          hint="vs. eating out"
-        />
-        <Stat
-          icon={<ChefHat className="size-4" />}
-          tone="fresh"
-          label="Meals cooked"
-          value={cooked}
-          hint="from tracked usage"
-        />
-        <Stat
-          icon={<TrendingDown className="size-4" />}
-          tone={wasteRate > 0.1 ? "soon" : "fresh"}
-          label="Waste rate"
-          value={`${(wasteRate * 100).toFixed(0)}%`}
-          hint={`${wasted} item(s) wasted`}
-        />
-        <Stat
-          icon={<Leaf className="size-4" />}
-          tone="fresh"
-          label="Items tracked"
-          value={pantry.length}
-        />
-      </div>
+      <dl className="mb-10 grid grid-cols-3 gap-6 border-y border-[var(--border)] py-4 sm:max-w-xl">
+        <Figure label="Items used" value={cooked} />
+        <Figure label="Items wasted" value={wasted} tone={wasted > 0 ? "warn" : undefined} />
+        <Figure label="Waste rate" value={`${(wasteRate * 100).toFixed(0)}%`} tone={wasteRate > 0.1 ? "warn" : undefined} />
+      </dl>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <h2 className="font-semibold mb-4">Pantry by category</h2>
-          <div className="space-y-2">
+      <div className="grid gap-10 lg:grid-cols-2 lg:gap-12">
+        <section>
+          <SectionTitle className="mb-3">Pantry by category</SectionTitle>
+          <div className="space-y-3">
             {byCategory.map(([cat, n]) => {
               const pct = (n / pantry.length) * 100;
               return (
                 <div key={cat}>
-                  <div className="flex justify-between text-sm mb-1">
+                  <div className="mb-1 flex justify-between text-sm">
                     <span>{cat}</span>
-                    <span className="text-[var(--text-muted)]">{n}</span>
+                    <span className="tabular-nums text-[var(--text-muted)]">{n}</span>
                   </div>
-                  <div className="h-2 bg-[var(--bg)] rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[var(--accent)]"
-                      style={{ width: `${pct}%` }}
-                    />
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
+                    <div className="h-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               );
             })}
             {byCategory.length === 0 && (
-              <p className="text-sm text-[var(--text-muted)]">
-                Nothing tracked yet.
-              </p>
+              <p className="text-sm text-[var(--text-muted)]">Nothing tracked yet.</p>
             )}
           </div>
-        </Card>
+        </section>
 
-        <Card>
-          <h2 className="font-semibold mb-4">Items by storage zone</h2>
-          <div className="grid grid-cols-3 gap-3">
+        <section>
+          <SectionTitle className="mb-3">Where things are stored</SectionTitle>
+          <dl className="grid grid-cols-3 gap-6 border-y border-[var(--border)] py-4">
             {byZone.map(([z, n]) => (
-              <div
-                key={z}
-                className="text-center border border-[var(--border)] rounded-xl p-4"
-              >
-                <div className="text-3xl font-semibold">{n}</div>
-                <div className="text-xs text-[var(--text-muted)] capitalize mt-1">
-                  {z}
-                </div>
-              </div>
+              <Figure key={z} label={z} value={n} capitalize />
             ))}
-          </div>
-        </Card>
+          </dl>
+        </section>
 
-        <Card className="lg:col-span-2">
-          <div className="flex justify-between mb-4">
-            <h2 className="font-semibold">Cooking activity (14d)</h2>
-            <Badge tone="info">
-              {last14Days.reduce((s, d) => s + d.count, 0)} planned meals
-            </Badge>
+        <section className="lg:col-span-2">
+          <div className="mb-3 flex items-baseline justify-between gap-4">
+            <SectionTitle>Planned meals, last 14 days</SectionTitle>
+            <span className="text-sm tabular-nums text-[var(--text-muted)]">{plannedMeals} planned</span>
           </div>
-          <div className="flex items-end gap-1 h-32">
+          <div className="flex h-32 items-end gap-1">
             {!mounted
               ? Array.from({ length: 14 }).map((_, i) => (
-                  <div key={i} className="flex-1 h-full flex items-end">
-                    <div className="w-full h-3 rounded-t-md bg-[var(--bg)] animate-pulse" />
+                  <div key={i} className="flex h-full flex-1 items-end">
+                    <div className="skeleton h-3 w-full rounded-t-md" />
                   </div>
                 ))
               : last14Days.map((d) => (
-              <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-                <div className="flex-1 w-full flex items-end">
+              <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+                <div className="flex w-full flex-1 items-end">
                   <div
-                    className="w-full bg-[var(--accent)] rounded-t-md min-h-[2px]"
+                    className="min-h-[2px] w-full rounded-t-md bg-[var(--accent)]"
                     style={{ height: `${(d.count / maxCount) * 100}%` }}
                     title={`${d.count} meals on ${d.date}`}
                   />
                 </div>
-                <div className="text-[10px] text-[var(--text-muted)]">
+                <div className="text-xs tabular-nums text-[var(--text-muted)]">
                   {format(parseISO(d.date), "d")}
                 </div>
               </div>
             ))}
           </div>
-        </Card>
+        </section>
 
-        <Card className="lg:col-span-2">
-          <h2 className="font-semibold mb-4">Recent activity</h2>
+        <section className="lg:col-span-2">
+          <SectionTitle className="mb-3">Recent activity</SectionTitle>
           {usage.length === 0 ? (
             <p className="text-sm text-[var(--text-muted)]">
-              No usage events yet. Use or waste an item from the pantry to start
-              tracking.
+              Nothing yet. Use or waste an item from the pantry to start tracking.
             </p>
           ) : (
-            <ul className="space-y-2 text-sm">
+            <ul className="divide-y divide-[var(--border)] border-y border-[var(--border)] text-sm">
               {usage
                 .slice()
                 .reverse()
                 .slice(0, 8)
                 .map((u) => (
-                  <li
-                    key={u.id}
-                    className="flex items-center justify-between border-b border-[var(--border)] last:border-0 pb-2 last:pb-0"
-                  >
+                  <li key={u.id} className="flex items-center justify-between gap-4 py-2.5">
                     <div>
                       <span className="font-medium">{u.itemName}</span>
-                      <span className="text-[var(--text-muted)]">
-                        {" "}
-                        — {u.quantity}
-                        {u.unit}
-                      </span>
+                      <span className="text-[var(--text-muted)]"> · {u.quantity}{u.unit}</span>
                     </div>
-                    <Badge tone={u.reason === "used" ? "fresh" : "expired"}>
+                    <span className={cn("shrink-0 capitalize", u.reason === "used" ? "text-[var(--fresh)]" : "text-[var(--danger)]")}>
                       {u.reason}
-                    </Badge>
+                    </span>
                   </li>
                 ))}
             </ul>
           )}
-        </Card>
+        </section>
       </div>
     </div>
   );
 }
 
-function Stat({
-  icon,
+function Figure({
   label,
   value,
-  hint,
   tone,
+  capitalize,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string | number;
-  hint?: string;
-  tone: "fresh" | "soon" | "info";
+  tone?: "warn";
+  capitalize?: boolean;
 }) {
-  const toneClass: Record<string, string> = {
-    fresh: "bg-[var(--accent-soft)] text-[var(--accent-hover)]",
-    soon: "bg-[var(--warn-soft)] text-[var(--warn)]",
-    info: "bg-[var(--info-soft)] text-[var(--info)]",
-  };
   return (
-    <Card>
-      <div className="flex items-center gap-2">
-        <span
-          className={`size-7 rounded-md grid place-items-center ${toneClass[tone]}`}
-        >
-          {icon}
-        </span>
-        <span className="text-xs text-[var(--text-muted)]">{label}</span>
-      </div>
-      <div className="mt-2 text-2xl font-semibold">{value}</div>
-      {hint && (
-        <div className="text-xs text-[var(--text-muted)] mt-0.5">{hint}</div>
-      )}
-    </Card>
+    <div>
+      <dt className={cn("text-sm text-[var(--text-muted)]", capitalize && "capitalize")}>{label}</dt>
+      <dd className={cn("mt-0.5 text-2xl font-medium tabular-nums", tone === "warn" && "text-[var(--warn)]")}>{value}</dd>
+    </div>
   );
 }

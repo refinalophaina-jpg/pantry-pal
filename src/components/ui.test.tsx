@@ -68,22 +68,19 @@ describe("Card / Input", () => {
 });
 
 describe("EmptyState", () => {
-  it("shows title, description, action, and a decorative illustration", () => {
+  it("shows title, description, and action", () => {
     render(
       <EmptyState
         title="Nothing here"
         description="Add your first item"
-        illustration="/illustrations/empty-pantry.svg"
         action={<button>Add</button>}
       />,
     );
     expect(screen.getByText("Nothing here")).toBeInTheDocument();
     expect(screen.getByText("Add your first item")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
-    const img = document.querySelector("img");
-    expect(img).toHaveAttribute("src", "/illustrations/empty-pantry.svg");
-    // Decorative: empty alt so screen readers skip it.
-    expect(img).toHaveAttribute("alt", "");
+    // No decorative artwork: the state is text and one action.
+    expect(document.querySelector("img")).toBeNull();
   });
 });
 

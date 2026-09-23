@@ -155,8 +155,7 @@ export function PlanWeekDialog({ open, onClose, start, onPlanned }: { open: bool
             </div>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-            <span className="text-[var(--text-muted)]">Plan from:</span>
-            <span className="inline-flex items-center gap-1.5">My recipes ({own.length})</span>
+            <span className="text-[var(--text-muted)]">Always your recipes ({own.length}), plus:</span>
             <label className="inline-flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="size-4 accent-[var(--accent)]" checked={useCatalog} onChange={(event) => setUseCatalog(event.target.checked)} /> World catalog ({index.length})</label>
             <label className="inline-flex cursor-pointer items-center gap-1.5"><input type="checkbox" className="size-4 accent-[var(--accent)]" checked={useDrafts} onChange={(event) => setUseDrafts(event.target.checked)} disabled={!pantry.length} /> Assistant drafts from my pantry</label>
           </div>

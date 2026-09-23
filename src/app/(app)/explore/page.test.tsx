@@ -49,7 +49,7 @@ describe('Explore page', () => {
     expect(within(section).getByRole('button', { name: /Local rice/ })).toHaveTextContent('2 of 3 in your pantry');
     expect(within(section).queryByRole('button', { name: /Pho/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'From my pantry' }));
-    expect(screen.getByRole('heading', { level: 2, name: /1 dish you can mostly cook now/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /1 dish that use what you have/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Pho/ })).not.toBeInTheDocument();
   });
 

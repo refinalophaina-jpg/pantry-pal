@@ -79,13 +79,28 @@ export function cuisineCounts(cards: ExploreCard[]): Array<{ name: string; count
     });
 }
 
-export function shuffledCards<T>(items: T[]): T[] {
+/** Deterministic shuffle so the grid keeps its order until the household asks for a new one. */
+export function shuffledCards<T>(items: T[], seed = 1): T[] {
   const result = [...items];
+  let state = (Math.floor(seed) >>> 0) || 1;
+  const next = () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 4294967296; };
   for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(next() * (i + 1));
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
+}
+
+const SEED_KEY = "pantry-pal-explore-seed";
+/** One order per browsing session; "Surprise me" draws a new one. */
+export function exploreSeed(fresh = false): number {
+  try {
+    const stored = fresh ? null : Number(sessionStorage.getItem(SEED_KEY));
+    if (stored && Number.isFinite(stored)) return stored;
+    const seed = Math.floor(Math.random() * 1e9) + 1;
+    sessionStorage.setItem(SEED_KEY, String(seed));
+    return seed;
+  } catch { return Math.floor(Math.random() * 1e9) + 1; }
 }
 
 export function clearExploreCache() { clearRecipeIndexCache(); }

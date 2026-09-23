@@ -40,6 +40,7 @@ export function RecipeDetail({
   onClose,
   onCook,
   onEdit,
+  onDelete,
   note,
 }: {
   recipe: Recipe;
@@ -47,6 +48,8 @@ export function RecipeDetail({
   onCook?: (recipe: Recipe) => void;
   /** Opens the editor for a saved recipe, or a copy of any other. */
   onEdit?: (recipe: Recipe) => void;
+  /** Removes a saved recipe; resolves true once it is gone. */
+  onDelete?: (recipe: Recipe) => Promise<boolean>;
   /** A short line from whoever suggested this recipe, e.g. why the planner picked it. */
   note?: string;
 }) {
@@ -59,6 +62,7 @@ export function RecipeDetail({
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [planDate, setPlanDate] = useState(() => format(addDays(new Date(), 1), "yyyy-MM-dd"));
   const [planMeal, setPlanMeal] = useState<(typeof MEALS)[number]>("dinner");
   const drafted = recipe.tags.includes("drafted");
@@ -280,6 +284,16 @@ export function RecipeDetail({
               <Button variant="secondary" onClick={() => onEdit(recipe)} disabled={busy}>
                 <Pencil className="size-4" /> {recipe.savedId ? "Edit" : "Copy & edit"}
               </Button>
+            )}
+            {onDelete && recipe.savedId && !confirmingDelete && (
+              <Button variant="ghost" onClick={() => setConfirmingDelete(true)} disabled={busy} className="text-[var(--danger)] hover:text-[var(--danger)]">Delete</Button>
+            )}
+            {onDelete && recipe.savedId && confirmingDelete && (
+              <span className="inline-flex items-center gap-1 text-sm">
+                <span className="text-[var(--text-muted)]">Delete this recipe?</span>
+                <Button variant="danger" size="sm" disabled={busy} onClick={async () => { setBusy(true); try { if (await onDelete(recipe)) onClose(); else setConfirmingDelete(false); } finally { setBusy(false); } }}>Delete</Button>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirmingDelete(false)}>Keep</Button>
+              </span>
             )}
             {recipe.video && (
               <a

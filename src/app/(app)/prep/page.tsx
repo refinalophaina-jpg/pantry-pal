@@ -23,14 +23,15 @@ import type { Recipe } from '@/lib/types';
 export default function PrepPage() { const identity = useAppStore(s => s._identity); return <PrepContent key={identity} />; }
 
 function PrepContent() {
-  const [start, setStart] = useState('');
+  // Prep renders only after sign-in on the client, so today's date is safe as the default.
+  const [start, setStart] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [people, setPeople] = useState(1);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<Recipe | null>(null);
   const [cooking, setCooking] = useState<Recipe | null>(null);
   const [batch, setBatch] = useState<PrepAssignment[]>([]);
   const [picking, setPicking] = useState(false);
-  const { planPrep, planBatch, buildWeekList } = useSyncedActions();
+  const { planPrep, planBatch, buildWeekList, addShoppingItems } = useSyncedActions();
   const { toast } = useToast();
   const pantry = useAppStore(s => s.pantry);
   const shopping = useAppStore(s => s.shopping);
@@ -110,6 +111,7 @@ function PrepContent() {
             {toBuy.length === 0 ? <p className="text-sm text-[var(--text-muted)]">Your pantry and shopping list already cover this batch.</p> : (
               <div className="space-y-3">
                 {grouped.map(([category, items]) => <div key={category}><p className="text-sm font-medium">{category}</p><p className="text-sm text-[var(--text-muted)]">{items.map(item => `${item.name} ${Math.round(item.quantity * 100) / 100} ${item.unit}`).join(', ')}</p></div>)}
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => act(async () => { const count = await addShoppingItems(toBuy.map(item => ({ ...item, fromRecipe: 'Three-day prep' }))); return `${count} ${count === 1 ? 'item' : 'items'} added to Shopping.`; })}>Add these to Shopping</Button>
               </div>
             )}
           </div>
@@ -118,17 +120,20 @@ function PrepContent() {
       {batch.length > 0 && (
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <Button disabled={busy || !start} onClick={() => act(async () => { const count = await planBatch(batch, start, people); return count ? `${count} meals added. Open Meal Plan to review, then shop these dates.` : 'Those slots already have meals. Change the days, meals or start date.'; })}>Plan this batch</Button>
-          {!start && <span className="text-sm text-[var(--text-muted)]">Choose the first day to plan.</span>}
+          <span className="text-sm text-[var(--text-muted)]">{start ? `Starting ${format(new Date(`${start}T12:00:00`), 'EEE d MMM')}.` : 'Choose the first day to plan.'}</span>
         </div>
       )}
     </section>
 
     <section aria-labelledby="templates-title" className="mb-8">
-      <SectionTitle className="mb-1"><span id="templates-title">Templates</span></SectionTitle>
-      <p className="mb-4 text-sm text-[var(--text-muted)]">Two small fresh-food shops and two prep sessions cover six lunches and dinners with one flexible day. Use a template as it is, or load it into your batch and change anything.</p>
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <SectionTitle><span id="templates-title">Templates</span></SectionTitle>
+        <Button variant="secondary" size="sm" disabled={busy || !start} onClick={() => act(async () => { const count = await buildWeekList(prepDates(start)); return count ? `${count} missing ingredients added for the selected three days.` : 'No missing ingredients to add. Check that these dates have planned meals.'; })}>Shop selected three days</Button>
+      </div>
+      <p className="mb-4 text-sm text-[var(--text-muted)]">Two small fresh-food shops and two prep sessions cover six lunches and dinners with one flexible day. Plan a template as it is, then shop the selected days; or load it into your batch and change anything.</p>
       <div className="grid gap-5 xl:grid-cols-2">{prepSessions.map(session => <Card key={session.id} className="space-y-4">
         <h3 className="text-lg font-medium">{session.title}</h3><p className="text-sm text-[var(--text-muted)]">{session.shared}</p>
-        <div className="grid grid-cols-2 gap-3">{session.recipes.map((id, i) => { const recipe = prepRecipes.find(r => r.id === id)!; return <button key={id} className="cursor-pointer space-y-2 text-left" onClick={() => setOpen(prepBatch(recipe, people))}><FoodVisual name={recipe.name} /><span className="text-xs text-[var(--text-muted)]">{i === 0 ? 'Lunch' : 'Dinner'} · days 1–3</span><span className="block text-sm font-medium">{recipe.name}</span></button>; })}</div>
+        <div className="grid grid-cols-2 gap-3">{session.recipes.map((id, i) => { const recipe = prepRecipes.find(r => r.id === id)!; return <button key={id} className="cursor-pointer space-y-2 text-left" onClick={() => setOpen(prepBatch(recipe, people))}><FoodVisual name={recipe.name} /><span className="block text-sm font-medium leading-snug">{recipe.name}</span><span className="block text-xs text-[var(--text-muted)]">{i === 0 ? 'Lunch' : 'Dinner'} · days 1–3 · {recipe.minutes} min</span></button>; })}</div>
         <details><summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">View prep order and shopping list</summary><ol className="list-decimal space-y-2 pl-5 text-sm">{session.order.map(step => <li key={step}>{step}</li>)}</ol>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">{(['fresh', 'staples'] as const).map(kind => <div key={kind}><h4 className="text-sm font-medium">{kind === 'fresh' ? 'Fresh · buy for this batch' : 'Cupboard · check before restocking'}</h4><p className="mt-1 text-sm text-[var(--text-muted)]">{Array.from(new Set(session.recipes.flatMap(id => prepNotes[id][kind]))).join(', ')}</p></div>)}</div>
         </details>
@@ -139,10 +144,6 @@ function PrepContent() {
       </Card>)}</div>
     </section>
 
-    <div className="my-6 flex flex-wrap items-center gap-4">
-      <Button variant="secondary" disabled={busy || !start} onClick={() => act(async () => { const count = await buildWeekList(prepDates(start)); return count ? `${count} missing ingredients added for the selected three days.` : 'No missing ingredients to add. Check that these dates have planned meals.'; })}>Shop selected three days</Button>
-      <Link href="/meal-plan/" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">Open meal plan</Link><Link href="/shopping/" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">Open shopping</Link>
-    </div>
     <details className="mb-6 rounded-xl border border-[var(--border)] p-5"><summary className="min-h-11 cursor-pointer font-medium">Cool, store and reheat your batch</summary><p className="mt-3 text-sm leading-relaxed">Portion cooked food into shallow containers and refrigerate promptly, within two hours (one hour above 90°F / 32°C). Keep the fridge at 40°F / 4°C or below. Most cooked leftovers keep 3–4 days; freeze portions you will not use in time. Reheat leftovers to 165°F / 74°C. Label containers with the preparation date.</p><p className="mt-3 text-sm">Rice needs extra care: cool quickly, ideally within one hour. For this plan, cook rice fresh or freeze later portions promptly; the UK Food Standards Agency recommends using refrigerated rice within 24 hours. Reheat only the portion you will eat.</p><p className="mt-3 text-xs">Sources: <a className="underline" href="https://www.fsis.usda.gov/food-safety/safe-food-handling-and-preparation/food-safety-basics/leftovers-and-food-safety" target="_blank" rel="noreferrer">USDA leftovers guidance</a> · <a className="underline" href="https://www.food.gov.uk/print/pdf/node/4286" target="_blank" rel="noreferrer">FSA rice guidance</a></p></details>
     <SectionTitle className="mb-3">Breakfast and a branch-out bowl</SectionTitle><div className="grid gap-4 sm:grid-cols-2">{prepRecipes.slice(4).map(recipe => <button type="button" className="cursor-pointer space-y-3 rounded-xl border border-[var(--border)] p-4 text-left hover:border-[var(--text-muted)]" key={recipe.id} onClick={() => setOpen(prepBatch(recipe, people))}><FoodVisual name={recipe.name} /><h3 className="font-medium">{recipe.name}</h3><p className="text-sm text-[var(--text-muted)]">{recipe.description}</p></button>)}</div>
     <p className="mt-6 text-xs text-[var(--text-muted)]">Prep dishes are original Pantry Pal kitchen drafts, inspired by these cuisines. Timing is approximate; adjust seasoning and follow package instructions. <Link href="/food-guide/" className="underline">Explore the food & nutrition guide.</Link></p>

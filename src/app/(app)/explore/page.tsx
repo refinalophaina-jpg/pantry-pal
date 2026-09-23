@@ -12,7 +12,7 @@ import { useToast } from "@/components/toast";
 import { useAuth } from "@/lib/auth-context";
 import { useAppStore } from "@/lib/store";
 import { ApiError } from "@/lib/api-client";
-import { cachedExploreCards, cardFromRecipe, cuisineCounts, EXPLORE_CUISINES, loadExploreCards, resolveCard, searchCards, shuffledCards, uniqueCards, type ExploreCard } from "@/lib/explore-recipes";
+import { cachedExploreCards, cardFromRecipe, cuisineCounts, EXPLORE_CUISINES, exploreSeed, loadExploreCards, resolveCard, searchCards, shuffledCards, uniqueCards, type ExploreCard } from "@/lib/explore-recipes";
 import { matchAgainstPantry, rankByPantry, type PantryMatch } from "@/lib/pantry-match";
 import { draftDishes, type DraftedDish } from "@/lib/recipe-ai";
 import { recipesFromIngredients, searchRecipes as searchWeb } from "@/lib/spoonacular";
@@ -35,7 +35,7 @@ function ExploreContent() {
   const [notice, setNotice] = useState<string | undefined>();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>("all");
-  const [seed, setSeed] = useState(0);
+  const [seed, setSeed] = useState(() => exploreSeed());
   const [visible, setVisible] = useState(24);
   const [open, setOpen] = useState<{ recipe: Recipe; note?: string } | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
@@ -65,20 +65,23 @@ function ExploreContent() {
   }, [allCards, pantryNames]);
   const fromPantry = useMemo(() => pantryNames.length ? rankByPantry(allCards, pantryNames, { minMatched: 2, limit: 12 }) : [], [allCards, pantryNames]);
   const cuisines = useMemo(() => cuisineCounts(cards).slice(0, 16), [cards]);
-  const shuffled = useMemo(() => shuffledCards(cards), [cards, seed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shuffled = useMemo(() => shuffledCards(cards, seed), [cards, seed]);
+  const draftWhy = useMemo(() => new Map(drafts.map((draft) => [draft.recipe.id, draft.why])), [drafts]);
 
   const results = useMemo(() => {
     const term = query.trim();
     if (view === "pantry") return searchCards(fromPantry.map((match) => match.entry), term);
     if (view === "kitchen") return searchCards(allCards.filter((card) => card.source === "kitchen" || card.source === "curated"), term);
     if (view !== "all") return searchCards(allCards, term, view);
-    if (!term) return uniqueCards([...drafts.map((draft) => cardFromRecipe(draft.recipe, "draft")), ...shuffled, ...webCards]);
+    if (!term) {
+      // The pantry section above already shows the top matches; do not repeat them here.
+      const shown = new Set(fromPantry.slice(0, 6).map((match) => match.entry.id));
+      return uniqueCards([...shuffled, ...webCards]).filter((card) => !shown.has(card.id) && !draftWhy.has(card.id));
+    }
     return searchCards(allCards, term);
-  }, [view, query, fromPantry, allCards, shuffled, drafts, webCards]);
+  }, [view, query, fromPantry, allCards, shuffled, webCards, draftWhy]);
 
   useEffect(() => { setVisible(24); }, [view, query]);
-
-  const draftWhy = useMemo(() => new Map(drafts.map((draft) => [draft.recipe.id, draft.why])), [drafts]);
 
   async function openCard(card: ExploreCard) {
     if (opening) return;
@@ -117,7 +120,7 @@ function ExploreContent() {
             <Button size="sm" variant="secondary" onClick={() => setDraftOpen(true)} disabled={!household}>
               <Sparkles className="size-4" /> Draft from my pantry
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => { setQuery(""); setView("all"); setSeed((value) => value + 1); }}>
+            <Button size="sm" variant="secondary" onClick={() => { setQuery(""); setView("all"); setSeed(exploreSeed(true)); }}>
               <Shuffle className="size-4" /> Surprise me
             </Button>
           </>
@@ -193,10 +196,10 @@ function ExploreContent() {
       {(view !== "all" || query.trim()) && (
         <h2 className="mb-3 text-sm text-[var(--text-muted)]">
           {results.length} {results.length === 1 ? "dish" : "dishes"}
-          {query.trim() ? <> for “{query.trim()}”</> : view === "pantry" ? " you can mostly cook now" : view === "kitchen" ? " from Our Kitchen" : ` from ${view}`}
+          {query.trim() ? <> for “{query.trim()}”</> : view === "pantry" ? " that use what you have, best match first" : view === "kitchen" ? " from Our Kitchen" : ` from ${view}`}
         </h2>
       )}
-      {showingPantry && <SectionTitle className="mb-3">Around the world</SectionTitle>}
+      {showingPantry && <SectionTitle className="mb-3">Everything else, in no particular order</SectionTitle>}
 
       {loading && results.length === 0 ? (
         <Grid>{Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} />)}</Grid>

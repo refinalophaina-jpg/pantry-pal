@@ -29,11 +29,29 @@ export default function AnalyticsPage() {
   const used = weeks.reduce((total, week) => total + week.used, 0);
   const wastedTotal = weeks.reduce((total, week) => total + week.wasted, 0);
   const plannedTotal = mix.reduce((total, item) => total + item.count, 0);
+  const quiet = usage.length === 0 && plannedTotal === 0;
 
   return (
     <div>
       <PageHeader title="Analytics" subtitle="Eight weeks of what you used, wasted, planned and stored, with what to do about it." />
 
+      {mounted && quiet ? (
+        <>
+          <section aria-labelledby="health-title-quiet" className="mb-10">
+            <SectionTitle className="mb-3"><span id="health-title-quiet">Pantry health</span></SectionTitle>
+            {health && <HealthFigures health={health} />}
+          </section>
+          <div className="rounded-xl border border-dashed border-[var(--border)] px-5 py-8 text-center">
+            <h2 className="font-medium">Nothing tracked yet</h2>
+            <p className="mx-auto mt-1 max-w-md text-sm text-[var(--text-muted)]">Use and waste show up here week by week, with the dishes and cuisines you plan most. Two things start it.</p>
+            <div className="mt-4 flex flex-wrap justify-center gap-3 text-sm">
+              <Link href="/pantry/" className="inline-flex min-h-11 items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 font-medium hover:bg-[var(--bg)]">Use 1 or Mark wasted in Pantry</Link>
+              <Link href="/meal-plan/" className="inline-flex min-h-11 items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 font-medium hover:bg-[var(--bg)]">Plan a week</Link>
+            </div>
+          </div>
+        </>
+      ) : (
+      <>
       {mounted && (
         <ul className="mb-8 space-y-2 text-sm">
           {notes.map((note) => <li key={note} className="flex gap-3"><span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-[var(--accent)]" /><span>{note}</span></li>)}
@@ -97,19 +115,7 @@ export default function AnalyticsPage() {
 
         <section aria-labelledby="health-title">
           <SectionTitle className="mb-3"><span id="health-title">Pantry health</span></SectionTitle>
-          {health && (
-            <>
-              <dl className="grid grid-cols-2 gap-6 border-y border-[var(--border)] py-4 sm:grid-cols-4">
-                <Figure label="Past their date" value={health.expired} tone={health.expired ? "danger" : undefined} />
-                <Figure label="Within 3 days" value={health.soon} tone={health.soon ? "warn" : undefined} />
-                <Figure label="No date" value={health.noDate} />
-                <Figure label="Untouched 45+ days" value={health.stale} tone={health.stale ? "warn" : undefined} />
-              </dl>
-              <dl className="grid grid-cols-3 gap-6 py-4">
-                {health.byZone.map((zone) => <Figure key={zone.name} label={zone.name} value={zone.count} capitalize />)}
-              </dl>
-            </>
-          )}
+          {health && <HealthFigures health={health} />}
         </section>
 
         <section className="lg:col-span-2">
@@ -128,7 +134,25 @@ export default function AnalyticsPage() {
           )}
         </section>
       </div>
+      </>
+      )}
     </div>
+  );
+}
+
+function HealthFigures({ health }: { health: NonNullable<ReturnType<typeof pantryHealth>> }) {
+  return (
+    <>
+      <dl className="grid grid-cols-2 gap-6 border-y border-[var(--border)] py-4 sm:grid-cols-4">
+        <Figure label="Past their date" value={health.expired} tone={health.expired ? "danger" : undefined} />
+        <Figure label="Within 3 days" value={health.soon} tone={health.soon ? "warn" : undefined} />
+        <Figure label="No date" value={health.noDate} />
+        <Figure label="Untouched 45+ days" value={health.stale} tone={health.stale ? "warn" : undefined} />
+      </dl>
+      <dl className="grid grid-cols-3 gap-6 py-4">
+        {health.byZone.map((zone) => <Figure key={zone.name} label={zone.name} value={zone.count} capitalize />)}
+      </dl>
+    </>
   );
 }
 

@@ -83,7 +83,7 @@ export function insights(input: { usage: UsageEvent[]; pantry: PantryItem[]; mea
   const sum = (list: WeekBucket[], key: "used" | "wasted") => list.reduce((total, bucket) => total + bucket[key], 0);
   const recentWaste = sum(recent, "wasted"); const recentUsed = sum(recent, "used");
   const earlierWaste = sum(earlier, "wasted"); const earlierUsed = sum(earlier, "used");
-  if (recentUsed + recentWaste === 0 && earlierUsed + earlierWaste === 0) notes.push("No usage tracked yet. Tap Use 1 or Mark wasted in Pantry and this page starts to mean something.");
+  if (recentUsed + recentWaste === 0 && earlierUsed + earlierWaste === 0) notes.push("No usage tracked yet. Tap Use 1 or Mark wasted in Pantry to start.");
   else {
     const rate = recentWaste / Math.max(1, recentUsed + recentWaste);
     const previous = earlierWaste / Math.max(1, earlierUsed + earlierWaste);

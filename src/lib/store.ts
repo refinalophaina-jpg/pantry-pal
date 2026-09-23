@@ -93,6 +93,8 @@ interface AppState {
   clearCompleted: (ctx: SyncedActionsCtx) => Promise<void>;
   generateFromRecipe: (recipe: string | Recipe, ctx: SyncedActionsCtx, servings?: number) => Promise<void>;
   moveShoppingToPantry: (id: string, ctx: SyncedActionsCtx) => Promise<void>;
+  /** Add several open items at once, e.g. a prep batch's to-buy list. */
+  addShoppingItems: (items: Array<{ name: string; quantity: number; unit: UnitType; category?: string; fromRecipe?: string }>, ctx: SyncedActionsCtx) => Promise<number>;
   buildWeekList: (dates: string[], ctx: SyncedActionsCtx) => Promise<number>;
 
   planPrep: (recipes: Recipe[], start: string, people: number, ctx: SyncedActionsCtx) => Promise<number>;
@@ -446,6 +448,11 @@ export const useAppStore = create<AppState>()(
         requestDataRefresh();
       },
       moveShoppingToPantry: async (id, ctx) => { const item = get().shopping.find(s => s.id === id); await operation(ctx, "move-shopping", { itemId: id, zone: item ? foodStorage(item.name).zone : "pantry" }); },
+      addShoppingItems: async (items, ctx) => {
+        const rows = items.filter((item) => item.name.trim() && item.quantity > 0).map((item) => ({ name: item.name.trim(), quantity: Math.max(0.001, Math.round(item.quantity * 1000) / 1000), unit: item.unit, category: item.category ?? foodStorage(item.name).category, from_recipe: item.fromRecipe ?? null }));
+        for (let start = 0; start < rows.length; start += 50) await operation(ctx, "add-shopping-batch", { items: rows.slice(start, start + 50) });
+        return rows.length;
+      },
       clearCompleted: async (ctx) => {
         if (get().shopping.some((s) => s.done)) await operation(ctx, "clear-completed", {});
       },

@@ -125,6 +125,7 @@ export function useSyncedActions() {
     generateFromRecipe: (recipe: string | Recipe, servings?: number) =>
       store.generateFromRecipe(recipe, ctx, servings),
     moveShoppingToPantry: (id: string) => store.moveShoppingToPantry(id, ctx),
+    addShoppingItems: (items: Parameters<typeof store.addShoppingItems>[0]) => store.addShoppingItems(items, ctx),
     planPrep: (recipes: Recipe[], start: string, people: number) => store.planPrep(recipes, start, people, ctx),
     planBatch: (assignments: Parameters<typeof store.planBatch>[0], start: string, people: number) => store.planBatch(assignments, start, people, ctx),
     buildWeekList: (dates: string[]) => store.buildWeekList(dates, ctx),

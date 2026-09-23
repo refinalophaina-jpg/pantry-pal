@@ -106,6 +106,11 @@
           }
         }
       ],
+      "triggers": {
+        "crons": [
+          "17 * * * *"
+        ]
+      },
       "preview_urls": false
     },
     "production": {

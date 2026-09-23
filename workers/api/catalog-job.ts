@@ -4,6 +4,12 @@ function label(value: unknown, max: number): string | null {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null;
 }
 
+/** Short, log-safe description of why a job step failed, for catalog_jobs.last_error. */
+export function failureReason(value: unknown): string {
+  const text = value instanceof Error ? `${value.name}: ${value.message}` : String(value);
+  return text.replace(/\s+/g, ' ').trim().slice(0, 200) || 'unknown';
+}
+
 /** One bounded, idempotent batch per hourly tick. Failed rows remain eligible. */
 export async function refreshCatalog(env: Env): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -24,7 +30,7 @@ export async function refreshCatalog(env: Env): Promise<void> {
       url.searchParams.set('page_size', '100');
       url.searchParams.set('fields', 'code,product_name,product_name_en,brands,categories,serving_size,nutriments');
       const response = await fetch(url, { headers: { 'User-Agent': 'PantryPal/1.0 (https://pantry.ainadara.com)', Accept: 'application/json' }, signal: AbortSignal.timeout(25_000), redirect: 'error' });
-      if (!response.ok) throw new Error('catalog_fetch_failed');
+      if (!response.ok) throw new Error(`catalog_fetch_failed:${response.status}`);
       const data = await response.json() as { products?: unknown[] } | null;
       if (!Array.isArray(data?.products) || data.products.length > 100) throw new Error('catalog_response_invalid');
       const seen = new Set<string>();
@@ -53,14 +59,15 @@ export async function refreshCatalog(env: Env): Promise<void> {
     await env.DB.batch([
       assertion(env, guardId, "EXISTS(SELECT 1 FROM catalog_jobs WHERE name='openfoodfacts' AND lease_token=? AND lease_until>?)", [token, Math.floor(Date.now() / 1000)]),
       ...updates,
-      env.DB.prepare("UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_finished_at=?,last_status=?,requested=?,updated=?,missing=? WHERE name='openfoodfacts' AND lease_token=?").bind(new Date().toISOString(), missing ? 'partial' : 'ok', requested, updated, missing, token),
+      env.DB.prepare("UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_finished_at=?,last_status=?,requested=?,updated=?,missing=?,last_error=NULL WHERE name='openfoodfacts' AND lease_token=?").bind(new Date().toISOString(), missing ? 'partial' : 'ok', requested, updated, missing, token),
       clearAssertion(env, guardId),
     ]);
     console.log(JSON.stringify({ event: 'catalog_refresh', status: missing ? 'partial' : 'ok', requested, updated, missing }));
-  } catch {
-    const result = await env.DB.prepare("UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_finished_at=?,last_status='failed',requested=?,updated=0,missing=? WHERE name='openfoodfacts' AND lease_token=?").bind(new Date().toISOString(), requested, requested, token).run();
+  } catch (error) {
+    const reason = failureReason(error);
+    const result = await env.DB.prepare("UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_finished_at=?,last_status='failed',requested=?,updated=0,missing=?,last_error=? WHERE name='openfoodfacts' AND lease_token=?").bind(new Date().toISOString(), requested, requested, reason, token).run();
     const status = result.meta.changes ? 'failed' : 'superseded';
-    console.error(JSON.stringify({ event: 'catalog_refresh', status, requested }));
+    console.error(JSON.stringify({ event: 'catalog_refresh', status, requested, error: reason }));
     throw new Error(`Catalog refresh ${status}; rows remain eligible for the next tick.`);
   }
 }

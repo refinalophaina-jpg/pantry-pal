@@ -19,13 +19,13 @@ function letterOf(input: RequestInfo | URL) { return new URL(String(input)).sear
 beforeAll(async () => {
   mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("test")}}', compatibilityDate: '2026-09-21', d1Databases: ['DB'] }));
   env = await mf.getBindings<Env>();
-  for (const file of ['migrations/auth/0001_better_auth.sql', 'migrations/d1/0001_domain.sql', 'migrations/d1/0003_catalog_jobs.sql', 'migrations/d1/0004_catalog_lease_token.sql', 'migrations/d1/0007_recipe_sources.sql']) {
+  for (const file of ['migrations/auth/0001_better_auth.sql', 'migrations/d1/0001_domain.sql', 'migrations/d1/0003_catalog_jobs.sql', 'migrations/d1/0004_catalog_lease_token.sql', 'migrations/d1/0007_recipe_sources.sql', 'migrations/d1/0010_catalog_job_error.sql']) {
     await env.DB.exec(readFileSync(file, 'utf8').replace(/^--.*$/gm, '').replace(/\n/g, ' '));
   }
 });
 afterAll(async () => { await mf?.dispose(); });
 beforeEach(async () => {
-  await env.DB.exec("DELETE FROM recipe_catalog; UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_status=NULL,last_started_at=NULL,last_finished_at=NULL,requested=0,updated=0,missing=0 WHERE name='themealdb';");
+  await env.DB.exec("DELETE FROM recipe_catalog; UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_status=NULL,last_started_at=NULL,last_finished_at=NULL,requested=0,updated=0,missing=0,last_error=NULL WHERE name='themealdb';");
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -85,14 +85,23 @@ describe('TheMealDB weekly mirror with a real D1 binding', () => {
     expect(state).toHaveLength(1);
     expect(state[0]).toMatchObject({ slug: 'mealdb-1', name: 'Adobo', cuisine: 'Filipino' });
     expect(await env.DB.prepare('SELECT count(*) AS n FROM recipe_catalog').first<number>('n')).toBe(1);
-    expect(await job()).toMatchObject({ last_status: 'partial', requested: 1, updated: 1, missing: 2, lease_token: null });
+    expect(await job()).toMatchObject({ last_status: 'partial', requested: 1, updated: 1, missing: 2, lease_token: null, last_error: 'Error: mealdb_fetch_failed:503' });
   });
 
-  it('rejects malformed responses, records a failed run, and releases the lease', async () => {
+  it('rejects malformed responses, records a failed run with its reason, and releases the lease', async () => {
     fetchMock.mockImplementation(async () => Response.json({ meals: 'not a list' }));
     await expect(refreshMealDb(env)).rejects.toThrow('failed');
-    expect(await job()).toMatchObject({ last_status: 'failed', lease_until: 0, lease_token: null });
+    expect(await job()).toMatchObject({ last_status: 'failed', lease_until: 0, lease_token: null, last_error: 'Error: mealdb_unavailable (Error: mealdb_response_invalid)' });
     expect(await env.DB.prepare('SELECT count(*) AS n FROM recipe_catalog').first<number>('n')).toBe(0);
+  });
+
+  it('records the upstream status when every letter is refused, and clears it after a clean run', async () => {
+    fetchMock.mockImplementation(async () => new Response('blocked', { status: 403 }));
+    await expect(refreshMealDb(env)).rejects.toThrow('failed');
+    expect(await job()).toMatchObject({ last_status: 'failed', requested: 0, last_error: 'Error: mealdb_unavailable (Error: mealdb_fetch_failed:403)' });
+    fetchMock.mockImplementation(async input => Response.json({ meals: letterOf(input) === 'a' ? [meal('1', 'Adobo', 'Filipino')] : null }));
+    await refreshMealDb(env);
+    expect(await job()).toMatchObject({ last_status: 'ok', requested: 1, updated: 1, missing: 0, last_error: null });
   });
 
   it('skips while another invocation holds the lease and leaves the openfoodfacts job alone', async () => {

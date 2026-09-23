@@ -1,5 +1,6 @@
 import { mealToRecipe, type MealDBFull } from '../../src/lib/mealdb-parse';
 import { assertion, clearAssertion } from './domain-repository';
+import { failureReason } from './catalog-job';
 
 /**
  * Weekly mirror of TheMealDB into recipe_catalog so Explore browses instantly
@@ -17,7 +18,7 @@ async function fetchLetter(letter: string): Promise<MealDBFull[]> {
   const url = new URL('https://www.themealdb.com/api/json/v1/1/search.php');
   url.searchParams.set('f', letter);
   const response = await fetch(url, { headers: { 'User-Agent': 'PantryPal/1.0 (https://pantry.ainadara.com)', Accept: 'application/json' }, signal: AbortSignal.timeout(12_000), redirect: 'error' });
-  if (!response.ok) throw new Error('mealdb_fetch_failed');
+  if (!response.ok) throw new Error(`mealdb_fetch_failed:${response.status}`);
   const data = await response.json() as { meals?: unknown } | null;
   if (data?.meals === null || data?.meals === undefined) return [];
   if (!Array.isArray(data.meals) || data.meals.length > 400) throw new Error('mealdb_response_invalid');
@@ -57,8 +58,11 @@ export async function refreshMealDb(env: Env): Promise<void> {
   try {
     const results = await mapPool(LETTERS, 4, fetchLetter);
     const failedLetters = results.filter(result => result.status === 'rejected').length;
+    // The first failure's reason is kept on the job row so a deployment can be diagnosed without logs.
+    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    const lastError = firstFailure ? failureReason(firstFailure.reason) : null;
     // Nothing loaded means the source or the network is down, not a partial mirror.
-    if (failedLetters === LETTERS.length) throw new Error('mealdb_unavailable');
+    if (failedLetters === LETTERS.length) throw new Error(`mealdb_unavailable (${lastError})`);
     const statements: D1PreparedStatement[] = [];
     const seen = new Set<string>();
     for (const result of results) {
@@ -86,13 +90,14 @@ export async function refreshMealDb(env: Env): Promise<void> {
       ]);
     }
     const status = failedLetters ? 'partial' : 'ok';
-    await env.DB.prepare("UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_finished_at=?,last_status=?,requested=?,updated=?,missing=? WHERE name='themealdb' AND lease_token=?")
-      .bind(new Date().toISOString(), status, requested, statements.length, failedLetters, token).run();
-    console.log(JSON.stringify({ event: 'mealdb_refresh', status, requested, updated: statements.length, missing: failedLetters }));
-  } catch {
-    const result = await env.DB.prepare("UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_finished_at=?,last_status='failed',requested=?,updated=0,missing=0 WHERE name='themealdb' AND lease_token=?").bind(new Date().toISOString(), requested, token).run();
+    await env.DB.prepare("UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_finished_at=?,last_status=?,requested=?,updated=?,missing=?,last_error=? WHERE name='themealdb' AND lease_token=?")
+      .bind(new Date().toISOString(), status, requested, statements.length, failedLetters, lastError, token).run();
+    console.log(JSON.stringify({ event: 'mealdb_refresh', status, requested, updated: statements.length, missing: failedLetters, error: lastError }));
+  } catch (error) {
+    const reason = failureReason(error);
+    const result = await env.DB.prepare("UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_finished_at=?,last_status='failed',requested=?,updated=0,missing=0,last_error=? WHERE name='themealdb' AND lease_token=?").bind(new Date().toISOString(), requested, reason, token).run();
     const status = result.meta.changes ? 'failed' : 'superseded';
-    console.error(JSON.stringify({ event: 'mealdb_refresh', status, requested }));
+    console.error(JSON.stringify({ event: 'mealdb_refresh', status, requested, error: reason }));
     throw new Error(`TheMealDB mirror ${status}; it retries on the next tick.`);
   }
 }

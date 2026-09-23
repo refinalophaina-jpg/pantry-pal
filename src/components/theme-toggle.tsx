@@ -28,7 +28,7 @@ export function applyTheme(theme: Theme): void {
   }
 }
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({ className, compact = false }: { className?: string; compact?: boolean }) {
   // Start "light" on both server and first client render to avoid a hydration
   // mismatch; sync to the real applied theme once mounted.
   const [theme, setTheme] = useState<Theme>("light");
@@ -57,16 +57,17 @@ export function ThemeToggle({ className }: { className?: string }) {
       aria-label={`Switch to ${nextLabel} mode`}
       title={`Switch to ${nextLabel} mode`}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg)] cursor-pointer transition-colors",
+        "w-full flex items-center gap-3 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg)] cursor-pointer transition-colors",
+        compact ? "justify-center px-0" : "px-3",
         className,
       )}
     >
       {mounted && isDark ? (
-        <Sun className="size-4" />
+        <Sun className="size-4 shrink-0" />
       ) : (
-        <Moon className="size-4" />
+        <Moon className="size-4 shrink-0" />
       )}
-      <span>{mounted ? (isDark ? "Light mode" : "Dark mode") : "Theme"}</span>
+      {!compact && <span>{mounted ? (isDark ? "Light mode" : "Dark mode") : "Theme"}</span>}
     </button>
   );
 }

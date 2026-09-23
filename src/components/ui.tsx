@@ -161,6 +161,44 @@ export function Segmented<T extends string>({
   );
 }
 
+/** Toggle chip for filters and multi-select choices; reads as pressed to assistive tech. */
+export function Chip({
+  active,
+  className,
+  children,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { active: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      className={cn(
+        "inline-flex min-h-9 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        active
+          ? "border-[var(--text)] bg-[var(--text)] text-[var(--surface)]"
+          : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--text-muted)] hover:text-[var(--text)]",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...props }, ref) {
+  return (
+    <textarea
+      ref={ref}
+      className={cn(
+        "min-h-24 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-base leading-relaxed outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] focus-visible:outline-none",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
+
 export function Badge({
   tone = "default",
   className,
@@ -211,11 +249,14 @@ export function Modal({
   onClose,
   title,
   children,
+  size = "md",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  /** "lg" for editors and previews that need two columns. */
+  size?: "md" | "lg";
 }) {
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
@@ -257,7 +298,7 @@ export function Modal({
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       }}
     >
-      <div className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6">
+      <div className={cn("w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6", size === "lg" ? "max-w-2xl" : "max-w-md")}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <h2 id={titleId} className="pt-2 text-lg font-medium leading-snug">{title}</h2>
           <button type="button" aria-label={`Close ${title}`} className="size-11 shrink-0 rounded-lg text-2xl leading-none text-[var(--text-muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]" onClick={() => closeRef.current()}>×</button>

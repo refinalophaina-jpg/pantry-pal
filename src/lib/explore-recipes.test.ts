@@ -1,69 +1,60 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bundledExploreRecipes, loadExploreRecipes, clearExploreCache } from './explore-recipes';
-import type { Recipe } from './types';
+import { bundledCards, cachedExploreCards, cardFromEntry, cuisineCounts, loadExploreCards, resolveCard, searchCards, uniqueCards } from './explore-recipes';
+import type { CatalogEntry } from './catalog-index';
 
-const mocks = vi.hoisted(() => ({ catalog: vi.fn(), filter: vi.fn(), lookup: vi.fn(), random: vi.fn(), search: vi.fn() }));
-vi.mock('./food-db', () => ({ searchRecipeCatalog: mocks.catalog }));
-vi.mock('./mealdb', () => ({ filterByArea: mocks.filter, lookupMeal: mocks.lookup, randomMeals: mocks.random, searchByName: mocks.search }));
-const recipe = (id: string, name = id, cuisine = 'Italian'): Recipe => ({ id, name, cuisine, description: '', minutes: 20, difficulty: 'easy', servings: 2, equipment: [], ingredients: [{ name: 'Rice', quantity: 0.5, unit: 'cup' }], steps: ['Cook the rice.'], tags: [] });
-beforeEach(() => { clearExploreCache(); vi.resetAllMocks(); mocks.catalog.mockResolvedValue([]); mocks.random.mockResolvedValue([]); mocks.search.mockResolvedValue([]); });
+const mocks = vi.hoisted(() => ({ load: vi.fn(), cached: vi.fn(), fetchRecipe: vi.fn() }));
+vi.mock('./catalog-index', () => ({ loadRecipeIndex: mocks.load, readCachedIndex: mocks.cached, fetchCatalogRecipe: mocks.fetchRecipe, clearRecipeIndexCache: vi.fn(), catalogEntryId: (entry: { slug: string }) => `cat-${entry.slug}` }));
+const entry = (slug: string, name: string, cuisine = 'Vietnamese', ingredients = ['Rice noodles', 'Beef']): CatalogEntry => ({ slug, name, cuisine, minutes: 40, difficulty: 'medium', servings: 4, imageUrl: `https://www.themealdb.com/images/media/meals/${slug}.jpg`, source: 'themealdb', tags: ['Soup'], ingredients });
+beforeEach(() => { vi.resetAllMocks(); mocks.cached.mockReturnValue(null); mocks.load.mockResolvedValue([]); });
 
-describe('zero-secret Explore sources', () => {
-  it('loads Discover from D1 and bundled recipes without a world or paid-provider call', async () => {
-    mocks.catalog.mockResolvedValue([recipe('cat-special', 'Kitchen special')]);
-    const result = await loadExploreRecipes('discover');
-    expect(result.recipes[0].id).toBe('cat-special');
-    expect(result.recipes.length).toBeGreaterThan(1);
-    expect(result.notice).toBeUndefined();
-    expect(mocks.catalog).toHaveBeenCalledWith('', 100);
-    expect(mocks.random).not.toHaveBeenCalled();
-    expect(mocks.search).not.toHaveBeenCalled();
+describe('Explore from the shared catalog index', () => {
+  it('merges bundled kitchen recipes with the index without fetching any recipe', async () => {
+    mocks.load.mockResolvedValue([entry('mealdb-1', 'Pho'), entry('mealdb-2', 'Basil Thai Spaghetti', 'Thai')]);
+    const { cards, notice } = await loadExploreCards();
+    expect(notice).toBeUndefined();
+    expect(cards.length).toBe(bundledCards().length + 1);
+    const pho = cards.find(card => card.id === 'cat-mealdb-1')!;
+    expect(pho).toMatchObject({ slug: 'mealdb-1', cuisine: 'Vietnamese', source: 'themealdb', ingredients: ['Rice noodles', 'Beef'] });
+    expect(pho.recipe).toBeUndefined();
+    // The bundled copy of a dish wins over the catalog's duplicate name.
+    expect(cards.filter(card => card.name === 'Basil Thai Spaghetti')).toHaveLength(1);
+    expect(mocks.fetchRecipe).not.toHaveBeenCalled();
   });
 
-  it('keeps usable recipes and a visible notice when D1 or the world provider fails', async () => {
-    mocks.catalog.mockRejectedValue(new Error('API unavailable'));
-    mocks.random.mockRejectedValue(new Error('World unavailable'));
-    const result = await loadExploreRecipes('world');
-    expect(result.recipes.map(item => item.id)).toEqual(bundledExploreRecipes().map(item => item.id));
-    expect(result.notice).toContain('Our Kitchen could not be refreshed');
-    expect(result.notice).toContain('World recipes are temporarily unavailable');
+  it('keeps bundled recipes and explains when the catalog is unavailable, preferring a cached copy', async () => {
+    mocks.load.mockRejectedValue(new Error('offline'));
+    const first = await loadExploreCards();
+    expect(first.cards.map(card => card.id)).toEqual(bundledCards().map(card => card.id));
+    expect(first.notice).toContain('could not be loaded');
+    mocks.cached.mockReturnValue([entry('mealdb-9', 'Bun cha')]);
+    const second = await loadExploreCards();
+    expect(second.cards.some(card => card.id === 'cat-mealdb-9')).toBe(true);
+    expect(second.notice).toContain('last copy saved on this device');
+    expect(cachedExploreCards().some(card => card.id === 'cat-mealdb-9')).toBe(true);
   });
 
-  it('maps cuisine cards through full detail lookup, retains save/cook fields, and reports missing details', async () => {
-    mocks.filter.mockResolvedValue([{ idMeal: '10' }, { idMeal: '11' }]);
-    const full = { ...recipe('mealdb-10', 'World rice', 'Japanese'), externalId: '10', source: 'https://example.test/recipe' };
-    mocks.lookup.mockImplementation((id: string) => id === '10' ? Promise.resolve(full) : Promise.reject(new Error('Missing')));
-    const result = await loadExploreRecipes('Japanese');
-    expect(mocks.filter).toHaveBeenCalledWith('Japanese');
-    expect(mocks.lookup).toHaveBeenCalledTimes(2);
-    expect(result.recipes.find(item => item.id === 'mealdb-10')).toEqual(full);
-    expect(result.notice).toContain('Some World recipes');
-    expect(result.recipes.every(item => item.cuisine === 'Japanese')).toBe(true);
+  it('searches names, tags and ingredient names, filters by cuisine, and counts cuisines in the household order', () => {
+    const catalog = [cardFromEntry(entry('mealdb-1', 'Pho')), cardFromEntry(entry('mealdb-3', 'Jollof rice', 'Nigerian', ['Rice', 'Tomato']))];
+    const cards = uniqueCards([...bundledCards(), ...catalog]);
+    expect(searchCards(cards, 'rice noodles').map(card => card.name)).toContain('Pho');
+    expect(searchCards(catalog, 'noodles beef').map(card => card.name)).toEqual(['Pho']);
+    expect(searchCards(cards, '', 'nigerian').map(card => card.name)).toContain('Jollof rice');
+    expect(searchCards(cards, 'soup vietnamese').map(card => card.name)).toContain('Pho');
+    expect(searchCards(catalog, 'soup vietnamese').map(card => card.name)).toEqual(['Pho']);
+    const counts = cuisineCounts(cards);
+    expect(counts[0].name).toBe('Vietnamese');
+    expect(counts.find(item => item.name === 'Nigerian')).toEqual({ name: 'Nigerian', count: expect.any(Number) });
+    expect(counts.some(item => item.name === 'International')).toBe(false);
   });
 
-  it('keeps local cuisine filtering accurate when external browsing fails', async () => {
-    mocks.catalog.mockResolvedValue([recipe('cat-italian'), recipe('cat-french', 'French meal', 'French')]);
-    mocks.filter.mockRejectedValue(new Error('Unavailable'));
-    const result = await loadExploreRecipes('French');
-    expect(result.recipes.some(item => item.id === 'cat-french')).toBe(true);
-    expect(result.recipes.every(item => item.cuisine === 'French')).toBe(true);
-    expect(result.notice).toContain('World recipes are temporarily unavailable');
+  it('resolves catalog cards by slug on open and bundled cards from memory', async () => {
+    const full = { id: 'cat-mealdb-1', name: 'Pho', description: '', cuisine: 'Vietnamese', minutes: 40, difficulty: 'medium' as const, servings: 4, equipment: [], ingredients: [{ name: 'Beef', quantity: 1, unit: 'kg' as const }], steps: ['Simmer.'], tags: [] };
+    mocks.fetchRecipe.mockResolvedValue(full);
+    expect(await resolveCard(cardFromEntry(entry('mealdb-1', 'Pho')))).toEqual(full);
+    expect(mocks.fetchRecipe).toHaveBeenCalledWith('mealdb-1');
+    const bundled = bundledCards()[0];
+    expect(await resolveCard(bundled)).toBe(bundled.recipe);
+    mocks.fetchRecipe.mockResolvedValue(null);
+    await expect(resolveCard(cardFromEntry(entry('gone', 'Gone')))).rejects.toThrow('no longer in the catalog');
   });
-
-  it('combines search, deduplicates names, and removes non-URL catalog provenance links', async () => {
-    mocks.catalog.mockResolvedValue([{ ...recipe('cat-rice', 'Special rice'), source: 'curated' }]);
-    mocks.search.mockResolvedValue([recipe('mealdb-12', 'Special rice'), recipe('mealdb-13', 'Different rice')]);
-    const result = await loadExploreRecipes('discover', 'Special rice');
-    expect(mocks.search).toHaveBeenCalledWith('Special rice');
-    expect(result.recipes.filter(item => item.name === 'Special rice')).toHaveLength(1);
-    expect(result.recipes.find(item => item.id === 'cat-rice')!.source).toBeUndefined();
-    expect(result.recipes.some(item => item.id === 'mealdb-13')).toBe(true);
-  });
-});
-
-it('reuses bounded public catalog results between page visits', async () => {
-  const first = await loadExploreRecipes('kitchen');
-  const second = await loadExploreRecipes('kitchen');
-  expect(second).toBe(first);
-  expect(mocks.catalog).toHaveBeenCalledTimes(1);
 });

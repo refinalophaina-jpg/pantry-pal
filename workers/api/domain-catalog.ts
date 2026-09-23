@@ -9,6 +9,24 @@ function like(value: string) { return value.replace(/[\\%_]/g,'\\$&'); }
 function fts(value: string) {
   return value.normalize('NFKC').match(/[\p{L}\p{N}]+/gu)?.slice(0,12).map(word=>`"${word}"*`).join(' AND ') ?? '';
 }
+/**
+ * Slim listing of the whole recipe catalog (curated, TheMealDB mirror and
+ * cached Spoonacular results) so Explore can search, filter and match the
+ * pantry in the browser without a request per recipe. Full rows load by slug.
+ */
+async function recipeIndex(env: Env) {
+  const result=await env.DB.prepare('SELECT slug,name,cuisine,minutes,difficulty,servings,image_url,source,tags,ingredients FROM recipe_catalog ORDER BY name COLLATE NOCASE,slug LIMIT 4000').all<Row>();
+  const data=result.results.map(raw=>{
+    const row=decode(raw);
+    const ingredients=Array.isArray(row.ingredients) ? row.ingredients : [];
+    return {
+      slug:row.slug, name:row.name, cuisine:row.cuisine, minutes:row.minutes, difficulty:row.difficulty, servings:row.servings,
+      imageUrl:row.image_url ?? null, source:row.source, tags:Array.isArray(row.tags) ? row.tags : [],
+      ingredients:ingredients.map(item=>item && typeof item==='object' ? String((item as Row).name ?? '') : '').filter(Boolean).slice(0,50),
+    };
+  });
+  return json({data,count:data.length});
+}
 export async function handleCatalog(request: Request, env: Env): Promise<Response|null> {
   const url=new URL(request.url);
   if (url.pathname !== '/api/nutrition' && !url.pathname.startsWith('/api/catalog/')) return null;
@@ -18,12 +36,19 @@ export async function handleCatalog(request: Request, env: Env): Promise<Respons
     const row=await env.DB.prepare('SELECT * FROM nutrition_cache WHERE key=?').bind(name.trim().toLowerCase()).first<Row>();
     return json({data:row});
   }
+  if (url.pathname === '/api/catalog/recipes/index') return recipeIndex(env);
   const collection=url.pathname.split('/')[3];
   if (!['ingredients','foods','recipes','techniques'].includes(collection)) return null;
   const table=collection === 'recipes' ? 'recipe_catalog' : collection;
   const nameColumn=collection === 'techniques' ? 'title' : 'name';
   const rowId=url.searchParams.get('id');
   if(rowId) { id(rowId,'id'); const row=await env.DB.prepare(`SELECT * FROM ${table} WHERE id=?`).bind(rowId).first<Row>(); return json({data:row ? decode(row) : null}); }
+  if(collection==='recipes' && url.searchParams.has('slug')) {
+    const slug=url.searchParams.get('slug')!;
+    if(!/^[A-Za-z0-9._-]{1,200}$/.test(slug)) invalid('slug');
+    const row=await env.DB.prepare('SELECT * FROM recipe_catalog WHERE slug=?').bind(slug).first<Row>();
+    return json({data:row ? decode(row) : null});
+  }
   if (collection==='foods' && url.searchParams.has('barcode')) {
     const barcode=url.searchParams.get('barcode')!;
     if(!/^\d{4,32}$/.test(barcode)) invalid('barcode');

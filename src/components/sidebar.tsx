@@ -20,6 +20,8 @@ import {
   Search,
   MoreHorizontal,
   KeyRound,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -56,24 +58,32 @@ function openSearch() {
 const rowClass =
   "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg)] hover:text-[var(--text)] cursor-pointer";
 
-function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+function NavLink({ item, pathname, collapsed }: { item: NavItem; pathname: string; collapsed: boolean }) {
   const Icon = item.icon;
   const active = isActive(pathname, item.href);
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      aria-label={collapsed ? item.label : undefined}
+      title={collapsed ? item.label : undefined}
       className={cn(
-        "flex min-h-10 items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition-colors",
+        "flex min-h-10 items-center gap-3 rounded-lg text-sm transition-colors",
+        collapsed ? "justify-center px-0" : "px-3 py-1.5",
         active
           ? "bg-[var(--bg)] font-medium text-[var(--text)]"
           : "text-[var(--text-muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]",
       )}
     >
-      <Icon className={cn("size-4", active && "text-[var(--accent-hover)]")} aria-hidden="true" />
-      {item.label}
+      <Icon className={cn("size-4 shrink-0", active && "text-[var(--accent-hover)]")} aria-hidden="true" />
+      {!collapsed && item.label}
     </Link>
   );
+}
+
+const COLLAPSE_KEY = "pantry-pal-sidebar-collapsed";
+function readCollapsed() {
+  try { return typeof window !== "undefined" && localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
 }
 
 export function Sidebar() {
@@ -81,61 +91,96 @@ export function Sidebar() {
   const { user, household, signOut } = useAuth();
   const [showInvite, setShowInvite] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
+  // The sidebar only renders after sign-in on the client, so reading the
+  // preference during the first render cannot disagree with server HTML.
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  function toggleCollapsed() {
+    setCollapsed((value) => {
+      try { localStorage.setItem(COLLAPSE_KEY, value ? "0" : "1"); } catch { /* preference stays for this visit */ }
+      return !value;
+    });
+  }
+  const iconRow = (label: string) => cn(rowClass, collapsed && "justify-center px-0");
+  const withLabel = (label: string, Icon: typeof LogOut) => (
+    <>
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      {!collapsed && label}
+    </>
+  );
   return (
-    <aside className="sticky top-0 hidden h-screen flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:w-60">
-      <div className="flex items-center gap-3 px-5 pb-3 pt-6">
+    <aside className={cn("sticky top-0 hidden h-screen flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width] duration-200 lg:flex", collapsed ? "lg:w-16" : "lg:w-60")}>
+      <div className={cn("flex items-center gap-3 pb-3 pt-6", collapsed ? "justify-center px-2" : "px-5")}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/illustrations/logo.svg" alt="" aria-hidden="true" className="size-8 rounded-lg" draggable={false} />
-        <div className="min-w-0">
-          <div className="font-medium leading-tight">Pantry Pal</div>
-          {household && (
-            <div className="truncate text-xs text-[var(--text-muted)]">{household.name}</div>
-          )}
-        </div>
+        {!collapsed && (
+          <div className="min-w-0">
+            <div className="font-medium leading-tight">Pantry Pal</div>
+            {household && (
+              <div className="truncate text-xs text-[var(--text-muted)]">{household.name}</div>
+            )}
+          </div>
+        )}
       </div>
-      <div className="px-3 pb-2">
+      <div className={cn("pb-2", collapsed ? "px-2" : "px-3")}>
         <button
           type="button"
           onClick={openSearch}
-          className="flex min-h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
+          aria-label={collapsed ? "Search" : undefined}
+          title={collapsed ? "Search (⌘K)" : undefined}
+          className={cn("flex min-h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm text-[var(--text-muted)] hover:text-[var(--text)]", collapsed ? "justify-center px-0" : "px-3")}
         >
-          <Search className="size-4" aria-hidden="true" />
-          <span className="flex-1 text-left">Search…</span>
-          <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-faint)]">
-            ⌘K
-          </kbd>
+          <Search className="size-4 shrink-0" aria-hidden="true" />
+          {!collapsed && <>
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text-faint)]">
+              ⌘K
+            </kbd>
+          </>}
         </button>
       </div>
-      <nav className="flex-1 overflow-y-auto px-3 py-2">
+      <nav className={cn("flex-1 overflow-y-auto py-2", collapsed ? "px-2" : "px-3")}>
         <ul className="space-y-0.5">
           {primaryNav.map((item) => (
-            <li key={item.href}><NavLink item={item} pathname={pathname} /></li>
+            <li key={item.href}><NavLink item={item} pathname={pathname} collapsed={collapsed} /></li>
           ))}
         </ul>
         <ul className="mt-3 space-y-0.5 border-t border-[var(--border)] pt-3">
           {secondaryNav.map((item) => (
-            <li key={item.href}><NavLink item={item} pathname={pathname} /></li>
+            <li key={item.href}><NavLink item={item} pathname={pathname} collapsed={collapsed} /></li>
           ))}
         </ul>
       </nav>
-      <div className="space-y-0.5 border-t border-[var(--border)] px-3 py-3">
-        <ThemeToggle className="min-h-10" />
+      <div className={cn("space-y-0.5 border-t border-[var(--border)] py-3", collapsed ? "px-2" : "px-3")}>
+        <ThemeToggle className="min-h-10" compact={collapsed} />
         {user?.isAnonymous && (
-          <button type="button" onClick={() => setShowRecovery(true)} className={rowClass}>
-            <KeyRound className="size-4" aria-hidden="true" />Guest recovery code
+          <button type="button" onClick={() => setShowRecovery(true)} className={iconRow("Guest recovery code")} aria-label={collapsed ? "Guest recovery code" : undefined} title={collapsed ? "Guest recovery code" : undefined}>
+            {withLabel("Guest recovery code", KeyRound)}
           </button>
         )}
         {household && (
-          <button type="button" onClick={() => setShowInvite(true)} className={rowClass}>
-            <Users className="size-4" aria-hidden="true" /> Invite partner
+          <button type="button" onClick={() => setShowInvite(true)} className={iconRow("Invite partner")} aria-label={collapsed ? "Invite partner" : undefined} title={collapsed ? "Invite partner" : undefined}>
+            {withLabel("Invite partner", Users)}
           </button>
         )}
-        <button type="button" onClick={() => signOut()} className={rowClass}>
-          <LogOut className="size-4" aria-hidden="true" /> Sign out
+        <button type="button" onClick={() => signOut()} className={iconRow("Sign out")} aria-label={collapsed ? "Sign out" : undefined} title={collapsed ? "Sign out" : undefined}>
+          {withLabel("Sign out", LogOut)}
         </button>
-        <p className="break-words px-3 pt-2 text-xs leading-snug text-[var(--text-faint)]">
-          {user?.isAnonymous ? "Guest · save a recovery code to keep this pantry" : user?.email}
-        </p>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-pressed={collapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={iconRow("Collapse")}
+        >
+          {collapsed ? <PanelLeftOpen className="size-4 shrink-0" aria-hidden="true" /> : <PanelLeftClose className="size-4 shrink-0" aria-hidden="true" />}
+          {!collapsed && "Collapse sidebar"}
+        </button>
+        {!collapsed && (
+          <p className="break-words px-3 pt-2 text-xs leading-snug text-[var(--text-faint)]">
+            {user?.isAnonymous ? "Guest · save a recovery code to keep this pantry" : user?.email}
+          </p>
+        )}
       </div>
       <InviteModal open={showInvite} onClose={() => setShowInvite(false)} />
       <GuestRecoveryModal open={showRecovery} onClose={() => setShowRecovery(false)} />

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseFraction, parseMeasure, mealToRecipe } from "./mealdb";
+import { parseFraction, parseMeasure, mealToRecipe } from "./mealdb-parse";
 
 describe("parseFraction", () => {
   it("parses simple and mixed fractions", () => {

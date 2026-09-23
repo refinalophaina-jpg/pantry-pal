@@ -31,7 +31,7 @@ describe("Meal planning with the actual D1 schema", () => {
     const response = await handleProviders(request(), env, { id: "user-a" });
     expect(response!.status).toBe(200);
     const prompt = JSON.parse(ai.mock.calls[0][1].messages[1].content);
-    expect(prompt.pantry).toEqual([{ name: "Private food a", expires_on: "2026-09-23" }]);
+    expect(prompt.pantry).toEqual([{ name: "Private food a", quantity: 1, unit: "pcs", expires_on: "2026-09-23" }]);
     expect(JSON.stringify(prompt)).not.toContain("Private food b");
   });
   it("does not send another household's pantry to AI", async () => {

@@ -2,6 +2,7 @@ import { ApiError, decode, failure, id, invalid, json, only, parseFields, readBo
 import { collections, type Collection } from './domain-collections';
 import { assertion, clearAssertion, insertStatement, listHouseholds, memberSql, requireMember, snapshot, type Actor } from './domain-repository';
 import { handleCatalog } from './domain-catalog';
+import { handleImages } from './domain-images';
 import { performOperation } from './domain-operations';
 export { listHouseholds } from './domain-repository';
 
@@ -36,6 +37,7 @@ async function routeData(request:Request, env:Env, user:Actor):Promise<Response|
     if(request.method!=='GET') throw new ApiError(405,'method_not_allowed','Unsupported method.');
     return json(await snapshot(env,hid,user.id));
   }
+  if(resource==='images') return handleImages(request,env,user.id,hid,rowId);
   if(resource==='invites' && !rowId) {
     if(request.method!=='POST') throw new ApiError(405,'method_not_allowed','Unsupported method.');
     const body=await readBody(request);only(body,[]);

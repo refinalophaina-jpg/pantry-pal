@@ -55,6 +55,8 @@ export const url: Validator = (v,k) => {
   try { const parsed = new URL(s); if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return s; } catch { /* invalid */ }
   return invalid(k);
 };
+/** A recipe photo: an absolute http(s) URL or a private household image served by this Worker. */
+export const imageRef: Validator = (v,k) => typeof v === 'string' && /^\/api\/households\/[A-Za-z0-9_-]{1,160}\/images\/[A-Za-z0-9_-]{1,160}$/.test(v) ? v : url(v,k);
 export function stringArray(maxItems = 100, maxLength = 200): Validator {
   return (v,k) => {
     if (!Array.isArray(v) || v.length > maxItems) return invalid(k);

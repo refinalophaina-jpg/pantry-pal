@@ -5,7 +5,22 @@ All notable changes to Pantry Pal are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — 2026-09-21 content update
+## [Unreleased] — 2026-09-23 recipe sources, planning and pantry
+
+### Added
+- Shared recipe catalog: a weekly Worker mirror of TheMealDB (migration 0007, `catalog_jobs.themealdb`), a slim `GET /api/catalog/recipes/index` for instant browsing, full rows by slug, and Spoonacular results cached into the same table when the optional key is set.
+- Explore rebuilt on the index: instant search over names, cuisines, tags and ingredients; cuisine chips with counts; "Cook from what you have" ranked by pantry coverage; "Draft from my pantry" (`POST /api/recipes/invent`, Qwen3 27B, strictly re-validated); optional "Search online".
+- "Plan my week": moods, cuisines, notes, span, meals and sources compose a brief; candidates come from your recipes and the catalog ranked by pantry coverage; Llama 3.3 70B fills only empty slots and gives a short reason per meal; swap or remove in a preview before anything is added.
+- Three-day prep builder: any dish (prep dishes, your recipes, the world catalog, or what the pantry can make) as lunch or dinner on any of the three days, with shared ingredients, a to-buy list and a cooking order. The two sessions remain as templates.
+- Recipe editor: new, edit, copy-to-edit and delete; photo upload (downsized in the browser, stored as a private household blob, migration 0008) or a generated plate illustration (`POST /api/recipes/illustrate`, FLUX.1 schnell). Plan any recipe from its dialog.
+- Pantry: type several items at once ("2 kg rice, 6 eggs (fridge)"), one Add dialog for type/scan/photo, and an item sheet with USDA FoodKeeper storage ranges (set a date from the guidance), nutrition per 100 g, recent use and the edit form.
+- Learn guides rewritten as short, numbered, sourced steps with USDA FSIS safe temperatures (migration 0009). Analytics shows eight weeks of used vs wasted, most wasted and planned dishes, cuisine mix, pantry health and plain-language insights. The desktop sidebar collapses to an icon rail.
+
+### Changed
+- The browser no longer calls TheMealDB directly; parsers for TheMealDB and Spoonacular are shared pure modules used by the Worker and the client.
+- Meal-plan generation returns a preview instead of writing directly; catalog picks are saved to My Recipes when the preview is accepted.
+
+## [0.10.0 unreleased notes] — 2026-09-21 content update
 
 ### Added
 - Three-day prep sessions for Thai/Indian and Nigerian/Vietnamese vegetarian-friendly meals, portion scaling, pantry-first shopping, and fresh/cupboard groups.

@@ -24,13 +24,13 @@ function deferred<T>() {
 beforeAll(async () => {
   mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("test")}}', compatibilityDate: '2026-09-21', d1Databases: ['DB'] }));
   env = await mf.getBindings<Env>();
-  for (const file of ['migrations/auth/0001_better_auth.sql', 'migrations/d1/0001_domain.sql', 'migrations/d1/0003_catalog_jobs.sql', 'migrations/d1/0004_catalog_lease_token.sql']) {
+  for (const file of ['migrations/auth/0001_better_auth.sql', 'migrations/d1/0001_domain.sql', 'migrations/d1/0003_catalog_jobs.sql', 'migrations/d1/0004_catalog_lease_token.sql', 'migrations/d1/0010_catalog_job_error.sql']) {
     await env.DB.exec(readFileSync(file, 'utf8').replace(/^--.*$/gm, '').replace(/\n/g, ' '));
   }
 });
 afterAll(async () => { await mf?.dispose(); });
 beforeEach(async () => {
-  await env.DB.exec("DELETE FROM foods; UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_status=NULL,last_started_at=NULL,last_finished_at=NULL,requested=0,updated=0,missing=0;");
+  await env.DB.exec("DELETE FROM foods; UPDATE catalog_jobs SET lease_until=0,lease_token=NULL,last_status=NULL,last_started_at=NULL,last_finished_at=NULL,requested=0,updated=0,missing=0,last_error=NULL;");
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -88,7 +88,7 @@ describe('catalog cron with a real D1 binding', () => {
     fetchMock.mockResolvedValueOnce(new Response('upstream unavailable', { status: 503 }));
     await expect(refreshCatalog(env)).rejects.toThrow('Catalog refresh failed');
     expect((await foods()).results.every(row => row.updated_at === stale && row.calories === 880)).toBe(true);
-    expect(await job()).toMatchObject({ requested: 2, updated: 0, missing: 2, last_status: 'failed', lease_until: 0, lease_token: null });
+    expect(await job()).toMatchObject({ requested: 2, updated: 0, missing: 2, last_status: 'failed', lease_until: 0, lease_token: null, last_error: 'Error: catalog_fetch_failed:503' });
     fetchMock.mockResolvedValueOnce(Response.json({ products: [product(code(0)), product(code(1))] }));
     await refreshCatalog(env);
     expect(await job()).toMatchObject({ requested: 2, updated: 2, last_status: 'ok' });

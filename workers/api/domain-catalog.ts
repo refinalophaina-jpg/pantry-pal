@@ -34,10 +34,11 @@ async function recipeIndex(env: Env) {
  */
 async function catalogJobs(env: Env) {
   const now=Math.floor(Date.now()/1000);
-  const result=await env.DB.prepare('SELECT name,last_status,last_started_at,last_finished_at,requested,updated,missing,lease_until FROM catalog_jobs ORDER BY name').all<Row>();
+  const result=await env.DB.prepare('SELECT name,last_status,last_started_at,last_finished_at,requested,updated,missing,lease_until,last_error FROM catalog_jobs ORDER BY name').all<Row>();
   const data=result.results.map(row=>({
     name:row.name, status:row.last_status ?? null, startedAt:row.last_started_at ?? null, finishedAt:row.last_finished_at ?? null,
     requested:Number(row.requested ?? 0), updated:Number(row.updated ?? 0), missing:Number(row.missing ?? 0), leased:Number(row.lease_until ?? 0)>now,
+    error:row.last_error ?? null,
   }));
   return json({data});
 }

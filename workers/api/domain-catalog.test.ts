@@ -14,7 +14,7 @@ async function get(path: string) {
 beforeAll(async () => {
   mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("test")}}', compatibilityDate: '2026-09-21', d1Databases: ['DB'] }));
   env = await mf.getBindings<Env>();
-  for (const file of ['migrations/auth/0001_better_auth.sql', 'migrations/d1/0001_domain.sql', 'migrations/d1/0002_reference_seed.sql', 'migrations/d1/0003_catalog_jobs.sql', 'migrations/d1/0004_catalog_lease_token.sql', 'migrations/d1/0007_recipe_sources.sql', 'migrations/d1/0009_technique_guides.sql']) {
+  for (const file of ['migrations/auth/0001_better_auth.sql', 'migrations/d1/0001_domain.sql', 'migrations/d1/0002_reference_seed.sql', 'migrations/d1/0003_catalog_jobs.sql', 'migrations/d1/0004_catalog_lease_token.sql', 'migrations/d1/0007_recipe_sources.sql', 'migrations/d1/0009_technique_guides.sql', 'migrations/d1/0010_catalog_job_error.sql']) {
     await env.DB.exec(readFileSync(file, 'utf8').replace(/^--.*$/gm, '').replace(/\n/g, ' '));
   }
   await env.DB.prepare("INSERT INTO recipe_catalog(id,slug,name,cuisine,minutes,ingredients,tags,image_url,source,source_id) VALUES('mealdb-1','mealdb-1','Pho','Vietnamese',90,?,?,'https://www.themealdb.com/images/media/meals/1.jpg','themealdb','1')")
@@ -55,15 +55,15 @@ describe('recipe catalog index', () => {
     expect(jobs).toEqual(['openfoodfacts', 'themealdb']);
   });
   it('reports scheduled job status without exposing the lease token', async () => {
-    await env.DB.prepare("UPDATE catalog_jobs SET last_status='ok',last_started_at='2026-09-23T03:17:00.000Z',last_finished_at='2026-09-23T03:17:09.000Z',requested=790,updated=790,missing=0,lease_until=0,lease_token='secret-token' WHERE name='themealdb'").run();
+    await env.DB.prepare("UPDATE catalog_jobs SET last_status='partial',last_started_at='2026-09-23T03:17:00.000Z',last_finished_at='2026-09-23T03:17:09.000Z',requested=760,updated=760,missing=1,lease_until=0,lease_token='secret-token',last_error='Error: mealdb_fetch_failed:503' WHERE name='themealdb'").run();
     await env.DB.prepare("UPDATE catalog_jobs SET last_status='running',lease_until=? WHERE name='openfoodfacts'").bind(Math.floor(Date.now() / 1000) + 600).run();
     const { status, body } = await get('/api/catalog/jobs');
     expect(status).toBe(200);
     expect(body.data).toEqual([
-      { name: 'openfoodfacts', status: 'running', startedAt: null, finishedAt: null, requested: 0, updated: 0, missing: 0, leased: true },
-      { name: 'themealdb', status: 'ok', startedAt: '2026-09-23T03:17:00.000Z', finishedAt: '2026-09-23T03:17:09.000Z', requested: 790, updated: 790, missing: 0, leased: false },
+      { name: 'openfoodfacts', status: 'running', startedAt: null, finishedAt: null, requested: 0, updated: 0, missing: 0, leased: true, error: null },
+      { name: 'themealdb', status: 'partial', startedAt: '2026-09-23T03:17:00.000Z', finishedAt: '2026-09-23T03:17:09.000Z', requested: 760, updated: 760, missing: 1, leased: false, error: 'Error: mealdb_fetch_failed:503' },
     ]);
     expect(JSON.stringify(body)).not.toContain('secret-token');
-    await env.DB.prepare("UPDATE catalog_jobs SET last_status=NULL,lease_until=0,lease_token=NULL,requested=0,updated=0,last_started_at=NULL,last_finished_at=NULL").run();
+    await env.DB.prepare("UPDATE catalog_jobs SET last_status=NULL,lease_until=0,lease_token=NULL,requested=0,updated=0,missing=0,last_started_at=NULL,last_finished_at=NULL,last_error=NULL").run();
   });
 });

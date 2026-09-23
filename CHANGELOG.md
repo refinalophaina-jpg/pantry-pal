@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The browser no longer calls TheMealDB directly; parsers for TheMealDB and Spoonacular are shared pure modules used by the Worker and the client.
 - Meal-plan generation returns a preview instead of writing directly; catalog picks are saved to My Recipes when the preview is accepted.
 - The staging Worker has the same hourly trigger as production, so the catalog refresh and the TheMealDB mirror can be verified on staging before a release; signed-in clients can read job status at `GET /api/catalog/jobs`.
+- Scheduled jobs keep the reason for a failed or partial run in `catalog_jobs.last_error` (migration 0010), including the upstream HTTP status, and the job-status read returns it as `error`.
 
 ## [0.10.0 unreleased notes] — 2026-09-21 content update
 

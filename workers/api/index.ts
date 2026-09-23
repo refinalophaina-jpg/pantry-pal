@@ -2,6 +2,7 @@ import { getSession, handleAuth } from './auth';
 import { handleData } from './data';
 import { handleProviders } from './providers';
 import { refreshCatalog } from './catalog-job';
+import { refreshMealDb } from './mealdb-job';
 import { ApiError, failure, json } from './domain-validation';
 
 /** Enforce actual streamed size; Content-Length alone can be omitted or forged. */
@@ -44,7 +45,8 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
   if (!session?.user || (!session.user.emailVerified && !("isAnonymous" in session.user && session.user.isAnonymous === true))) {
     throw new ApiError(401, 'unauthorized', 'Sign in or continue as a guest.');
   }
-  request = await boundedRequest(request, url.pathname.replace(/\/$/, '') === '/api/pantry/recognize' ? 8_500_000 : 131_072);
+  const bare = url.pathname.replace(/\/$/, '');
+  request = await boundedRequest(request, bare === '/api/pantry/recognize' ? 8_500_000 : /^\/api\/households\/[^/]+\/images$/.test(bare) ? 1_400_000 : 131_072);
   const provider = await handleProviders(request, env, session.user);
   if (provider) return provider;
   return await handleData(request, env, session.user) ?? failure(new ApiError(404, 'not_found', 'This API route does not exist.'));
@@ -69,10 +71,14 @@ export default {
     result.headers.set('X-Frame-Options', 'DENY');
     const path = new URL(request.url).pathname;
     result.headers.set('Referrer-Policy', path.startsWith('/api/auth/') || /^\/sign-in\/?$/.test(path) ? 'no-referrer' : 'strict-origin-when-cross-origin');
-    if (path.startsWith('/api/')) result.headers.set('Cache-Control', 'no-store');
+    if (path.startsWith('/api/') && !/^\/api\/households\/[^/]+\/images\/[^/]+$/.test(path)) result.headers.set('Cache-Control', 'no-store');
     return result;
   },
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(refreshCatalog(env));
+    // Each job owns its own lease and failure logging; one failing must not skip the other.
+    ctx.waitUntil((async () => {
+      await refreshCatalog(env).catch(() => {});
+      await refreshMealDb(env).catch(() => {});
+    })());
   },
 } satisfies ExportedHandler<Env>;

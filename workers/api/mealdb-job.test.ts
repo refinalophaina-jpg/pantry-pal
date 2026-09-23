@@ -95,6 +95,15 @@ describe('TheMealDB weekly mirror with a real D1 binding', () => {
     expect(await env.DB.prepare('SELECT count(*) AS n FROM recipe_catalog').first<number>('n')).toBe(0);
   });
 
+  it('never follows redirects: a 3xx answer is a refused letter', async () => {
+    fetchMock.mockImplementation(async (_input, init) => {
+      expect(init?.redirect).toBe('manual');
+      return new Response(null, { status: 301, headers: { Location: 'https://elsewhere.test/' } });
+    });
+    await expect(refreshMealDb(env)).rejects.toThrow('failed');
+    expect(await job()).toMatchObject({ last_status: 'failed', requested: 0, last_error: 'Error: mealdb_unavailable (Error: mealdb_fetch_failed:301)' });
+  });
+
   it('records the upstream status when every letter is refused, and clears it after a clean run', async () => {
     fetchMock.mockImplementation(async () => new Response('blocked', { status: 403 }));
     await expect(refreshMealDb(env)).rejects.toThrow('failed');

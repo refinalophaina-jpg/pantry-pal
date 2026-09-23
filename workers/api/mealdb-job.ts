@@ -17,7 +17,7 @@ function iso(seconds: number) { return new Date(seconds * 1000).toISOString(); }
 async function fetchLetter(letter: string): Promise<MealDBFull[]> {
   const url = new URL('https://www.themealdb.com/api/json/v1/1/search.php');
   url.searchParams.set('f', letter);
-  const response = await fetch(url, { headers: { 'User-Agent': 'PantryPal/1.0 (https://pantry.ainadara.com)', Accept: 'application/json' }, signal: AbortSignal.timeout(12_000), redirect: 'error' });
+  const response = await fetch(url, { headers: { 'User-Agent': 'PantryPal/1.0 (https://pantry.ainadara.com)', Accept: 'application/json' }, signal: AbortSignal.timeout(12_000), redirect: 'manual' });
   if (!response.ok) throw new Error(`mealdb_fetch_failed:${response.status}`);
   const data = await response.json() as { meals?: unknown } | null;
   if (data?.meals === null || data?.meals === undefined) return [];

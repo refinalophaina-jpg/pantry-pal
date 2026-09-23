@@ -114,7 +114,7 @@ describe("Provider boundaries", () => {
     expect(url.origin).toBe("https://api.spoonacular.com");
     expect(url.toString()).not.toContain("private-provider-key");
     expect(options.headers["x-api-key"]).toBe("private-provider-key");
-    expect(options.redirect).toBe("error");
+    expect(options.redirect).toBe("manual");
   });
   it("searches by pantry ingredients and caches complete results into the shared catalog", async () => {
     const batch = vi.fn(async () => []);

@@ -246,7 +246,7 @@ async function searchRecipes(request: Request, env: Env) {
   if (body.type !== undefined) url.searchParams.set('type', oneOf(mealTypes)(body.type, 'type') as string);
   if (body.maxReadyTime !== undefined) url.searchParams.set('maxReadyTime', String(number(5, 600, true)(body.maxReadyTime, 'maxReadyTime')));
   if (action === 'search') { url.searchParams.set('addRecipeInformation', 'true'); url.searchParams.set('fillIngredients', 'true'); url.searchParams.set('instructionsRequired', 'true'); }
-  const response = await fetch(url, { headers: { 'x-api-key': env.SPOONACULAR_API_KEY, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000), redirect: 'error' });
+  const response = await fetch(url, { headers: { 'x-api-key': env.SPOONACULAR_API_KEY, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000), redirect: 'manual' });
   if (!response.ok) throw new ApiError(502, 'provider_unavailable', 'Recipe search is temporarily unavailable. Try the other recipe collections.');
   const result = await response.json() as { results?: unknown[]; recipes?: unknown[] };
   const items = result.results ?? result.recipes;

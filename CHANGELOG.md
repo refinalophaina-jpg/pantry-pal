@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The staging Worker has the same hourly trigger as production, so the catalog refresh and the TheMealDB mirror can be verified on staging before a release; signed-in clients can read job status at `GET /api/catalog/jobs`.
 - Scheduled jobs keep the reason for a failed or partial run in `catalog_jobs.last_error` (migration 0010), including the upstream HTTP status, and the job-status read returns it as `error`.
 
+### Fixed
+- Every outbound Worker fetch (the TheMealDB mirror, the Open Food Facts refresh, the Spoonacular search) asked for `redirect: 'error'`, which the Cloudflare Workers runtime rejects with a TypeError before sending anything; the unit tests stub fetch in Node and never saw it. They now use `redirect: 'manual'` and treat a 3xx answer as a failed request, and a test guards the option.
+
 ## [0.10.0 unreleased notes] — 2026-09-21 content update
 
 ### Added

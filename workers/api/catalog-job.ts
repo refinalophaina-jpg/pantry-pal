@@ -29,7 +29,7 @@ export async function refreshCatalog(env: Env): Promise<void> {
       url.searchParams.set('code', [...barcodes].join(','));
       url.searchParams.set('page_size', '100');
       url.searchParams.set('fields', 'code,product_name,product_name_en,brands,categories,serving_size,nutriments');
-      const response = await fetch(url, { headers: { 'User-Agent': 'PantryPal/1.0 (https://pantry.ainadara.com)', Accept: 'application/json' }, signal: AbortSignal.timeout(25_000), redirect: 'error' });
+      const response = await fetch(url, { headers: { 'User-Agent': 'PantryPal/1.0 (https://pantry.ainadara.com)', Accept: 'application/json' }, signal: AbortSignal.timeout(25_000), redirect: 'manual' });
       if (!response.ok) throw new Error(`catalog_fetch_failed:${response.status}`);
       const data = await response.json() as { products?: unknown[] } | null;
       if (!Array.isArray(data?.products) || data.products.length > 100) throw new Error('catalog_response_invalid');

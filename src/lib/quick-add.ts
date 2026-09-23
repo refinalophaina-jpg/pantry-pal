@@ -26,7 +26,7 @@ const CATEGORY_RULES: Array<[RegExp, string]> = [
   [/\b(chips|crisps|crackers|cookies|biscuits|chocolate|nuts|almonds|popcorn|granola|bar|bars)\b/, "Snacks"],
   [/\b(juice|coffee|tea|water|soda|beer|wine|kombucha)\b/, "Beverages"],
   [/\b(salt|pepper|sugar|spice|cumin|turmeric|paprika|cinnamon|stock|broth|baking|yeast|vanilla|canned|tinned|can|tin)\b/, "Pantry staple"],
-  [/\b(apple|banana|mango|berry|berries|lemon|lime|orange|grape|avocado|tomato|onion|garlic|ginger|potato|carrot|spinach|kale|lettuce|cabbage|broccoli|pepper|chilli|chili|cucumber|zucchini|mushroom|herb|basil|cilantro|coriander|parsley|celery|corn|beans|peas|plantain|papaya|pineapple|greens|squash|eggplant|aubergine)s?\b/, "Produce"],
+  [/\b(apple|banana|mango|berry|berries|lemon|lime|orange|grape|avocado|tomato|onion|garlic|ginger|potato|carrot|spinach|kale|lettuce|cabbage|broccoli|pepper|chilli|chili|cucumber|zucchini|mushroom|herb|basil|cilantro|coriander|parsley|celery|corn|beans|peas|plantain|papaya|pineapple|greens|squash|eggplant|aubergine)(?:es|s)?\b/, "Produce"],
 ];
 
 export function guessCategory(name: string): string {
@@ -57,17 +57,27 @@ function parseOne(raw: string): QuickAddItem | null {
   text = text.replace(/\s+/g, " ").trim();
   let quantity = 1;
   let unit: UnitType = "pcs";
-  // Leading "2 kg rice", "500g spinach", "6 eggs", "1.5 l milk", "1/2 cup oats"
-  const lead = text.match(/^((?:\d+\/\d+)|(?:\d+(?:[.,]\d+)?))\s*([a-zA-Z]+)?\s+(.+)$/) ?? text.match(/^((?:\d+\/\d+)|(?:\d+(?:[.,]\d+)?))([a-zA-Z]+)\s*(.+)$/);
-  const trail = text.match(/^(.+?)\s+(?:x\s*)?((?:\d+\/\d+)|(?:\d+(?:[.,]\d+)?))\s*([a-zA-Z]+)?$/) ?? text.match(/^(.+?)\s+((?:\d+\/\d+)|(?:\d+(?:[.,]\d+)?))([a-zA-Z]+)$/);
-  if (lead && parseQuantity(lead[1]) !== null && (!lead[2] || UNIT_ALIASES[lead[2].toLowerCase()])) {
-    quantity = parseQuantity(lead[1])!;
-    unit = lead[2] ? UNIT_ALIASES[lead[2].toLowerCase()] : "pcs";
-    text = lead[3];
-  } else if (trail && parseQuantity(trail[2]) !== null && (!trail[3] || UNIT_ALIASES[trail[3].toLowerCase()])) {
-    quantity = parseQuantity(trail[2])!;
-    unit = trail[3] ? UNIT_ALIASES[trail[3].toLowerCase()] : "pcs";
-    text = trail[1];
+  const qty = "((?:\\d+\\/\\d+)|(?:\\d+(?:[.,]\\d+)?))";
+  const attempts: Array<[RegExp, (m: RegExpMatchArray) => [string, string | undefined, string]]> = [
+    // "2 kg rice", "500g spinach", "1/2 cup oats"
+    [new RegExp(`^${qty}\\s*([a-zA-Z]+)\\s+(.+)$`), (m) => [m[1], m[2], m[3]]],
+    [new RegExp(`^${qty}([a-zA-Z]+)\\s*(.+)$`), (m) => [m[1], m[2], m[3]]],
+    // "6 eggs", "3 tomatoes"
+    [new RegExp(`^${qty}\\s+(.+)$`), (m) => [m[1], undefined, m[2]]],
+    // "rice 2 kg", "spinach 200g", "eggs x6"
+    [new RegExp(`^(.+?)\\s+(?:x\\s*)?${qty}\\s*([a-zA-Z]+)$`), (m) => [m[2], m[3], m[1]]],
+    [new RegExp(`^(.+?)\\s+(?:x\\s*)?${qty}$`), (m) => [m[2], undefined, m[1]]],
+  ];
+  for (const [pattern, pick] of attempts) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const [rawQuantity, rawUnit, rest] = pick(match);
+    const parsed = parseQuantity(rawQuantity);
+    if (parsed === null || (rawUnit && !UNIT_ALIASES[rawUnit.toLowerCase()])) continue;
+    quantity = parsed;
+    unit = rawUnit ? UNIT_ALIASES[rawUnit.toLowerCase()] : "pcs";
+    text = rest;
+    break;
   }
   const name = text.replace(/^(of|x)\s+/i, "").replace(/\s+/g, " ").trim();
   if (!name || name.length > 120) return null;

@@ -33,19 +33,18 @@ offline workflows still have their own acceptance gates.
 | Accounts | Email/password sign-in, required email verification, verification resend, password recovery, and revocable D1-backed sessions. |
 | Guests | Start without email, keep a browser session, and optionally create a recovery code to restore the same household on another browser. |
 | Households | Create a household or redeem an invite. The API checks membership for household reads and writes. |
-| Pantry | Quantity, storage zone, expiry, barcode lookup, and food-photo suggestions for manual review. Photo recognition uses Workers AI. |
-| Recipes | Built-in recipes, World recipes from TheMealDB, serving scaling, favourites, cooking steps, and shopping-list actions. |
-| Meal planning | Weekly planning and a Workers AI suggestion endpoint constrained to the supplied recipe IDs and meal slots. |
+| Pantry | Type several items at once, scan a barcode, or photograph groceries (Workers AI suggests names for manual review). Each item has a sheet with USDA FoodKeeper storage guidance, nutrition per 100 g, and its recent use. |
+| Recipes | Your own recipes with a full editor (photos uploaded or illustrated), copies of built-in dishes, serving scaling, cooking steps, and shopping-list actions. Explore searches a shared catalog (curated, TheMealDB mirror, cached Spoonacular) instantly, ranks dishes by what your pantry covers, and can draft new dishes from the pantry with Workers AI. |
+| Meal planning | Weekly grid, a three-day prep builder, and "Plan my week": moods, cuisines and notes become a brief; candidates come from your recipes and the catalog ranked by pantry coverage; the preview lets you swap or remove before anything lands. Workers AI only chooses among the supplied recipe IDs. |
 | Shopping | Shared list, recipe-based additions, store/aisle ordering, and a separate read-only saved list. |
 | Reference data | D1 ingredients, foods, cooking techniques, and recipe catalog; importer tools populate the shared reference tables. |
 | Updates | Devices refresh while visible, after writes, and on resume, with retry/backoff after failures. This is polling, not a realtime subscription. |
 
-Explore opens with the D1 catalog and bundled recipes; no external recipe secret
-is needed. World recipes, cuisine browsing, and name searches can add TheMealDB
-results, with local recipes retained on provider failure. The existing
-Spoonacular endpoint is optional and unused by the default UI; configuring
-`SPOONACULAR_API_KEY` alone does not change Explore's sources. AI and external
-catalog availability depend on the configured account and upstream services.
+Explore opens from the shared D1 catalog and bundled recipes; no external recipe
+secret is needed. The catalog is refreshed by the Worker's hourly cron (a weekly
+TheMealDB mirror). Setting `SPOONACULAR_API_KEY` adds an optional "Search online"
+button whose results are cached into the same catalog. AI features run on
+Cloudflare Workers AI and depend on the configured account.
 
 ## Run locally
 

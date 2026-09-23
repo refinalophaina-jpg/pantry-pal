@@ -269,7 +269,7 @@ function ItemSheet({ item, onClose, onSave, onWaste, onDelete }: { item: PantryI
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState<"waste" | "delete" | null>(null);
-  const [nutrition, setNutrition] = useState<Awaited<ReturnType<typeof lookupNutrition>> | "loading" | null>(null);
+  const [nutrition, setNutrition] = useState<{ value: NonNullable<Awaited<ReturnType<typeof lookupNutrition>>>; state?: string } | "loading" | null>(null);
 
   useEffect(() => {
     if (!item) return;
@@ -277,7 +277,14 @@ function ItemSheet({ item, onClose, onSave, onWaste, onDelete }: { item: PantryI
     setConfirming(null);
     setNutrition("loading");
     let cancelled = false;
-    lookupNutrition(item.name).then((value) => { if (!cancelled) setNutrition(value); }).catch(() => { if (!cancelled) setNutrition(null); });
+    // Reference data keys on preparation state; a bare name falls back to its raw form.
+    (async () => {
+      const exact = await lookupNutrition(item.name).catch(() => null);
+      if (exact) return { value: exact };
+      if (/^(raw|cooked|dry|dried|frozen|canned)\b/i.test(item.name)) return null;
+      const raw = await lookupNutrition(`Raw ${item.name.toLowerCase()}`).catch(() => null);
+      return raw ? { value: raw, state: "raw" } : null;
+    })().then((result) => { if (!cancelled) setNutrition(result); });
     return () => { cancelled = true; };
   }, [item]);
 
@@ -329,12 +336,12 @@ function ItemSheet({ item, onClose, onSave, onWaste, onDelete }: { item: PantryI
           </section>
 
           <section aria-labelledby="nutrition-title">
-            <SectionTitle as="h3" className="mb-2"><span id="nutrition-title">Nutrition per 100 g</span></SectionTitle>
+            <SectionTitle as="h3" className="mb-2"><span id="nutrition-title">Nutrition per 100 g{nutrition && nutrition !== "loading" && nutrition.state ? `, ${nutrition.state}` : ""}</span></SectionTitle>
             {nutrition === "loading" ? (
               <p className="text-sm text-[var(--text-muted)]">Looking up…</p>
             ) : nutrition ? (
               <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
-                {([["Calories", nutrition.calories, "kcal"], ["Protein", nutrition.proteinG, "g"], ["Carbs", nutrition.carbsG, "g"], ["Fat", nutrition.fatG, "g"], ["Fibre", nutrition.fiberG, "g"]] as const).filter(([, value]) => value !== undefined).map(([label, value, suffix]) => (
+                {([["Calories", nutrition.value.calories, "kcal"], ["Protein", nutrition.value.proteinG, "g"], ["Carbs", nutrition.value.carbsG, "g"], ["Fat", nutrition.value.fatG, "g"], ["Fibre", nutrition.value.fiberG, "g"]] as const).filter(([, value]) => value !== undefined).map(([label, value, suffix]) => (
                   <div key={label} className="rounded-lg border border-[var(--border)] p-3 text-center">
                     <dd className="text-lg font-medium tabular-nums">{Math.round((value as number) * 10) / 10}<span className="text-xs font-normal text-[var(--text-faint)]"> {suffix}</span></dd>
                     <dt className="text-xs text-[var(--text-muted)]">{label}</dt>

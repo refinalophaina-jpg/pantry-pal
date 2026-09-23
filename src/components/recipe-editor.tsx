@@ -157,7 +157,7 @@ export function RecipeEditor({ mode, onClose, onSaved }: { mode: EditorMode | nu
               <Label htmlFor="rx-description">Description</Label>
               <Input id="rx-description" value={description} onChange={event => setDescription(event.target.value)} placeholder="One appetising sentence" />
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1.8fr_1fr_1fr_1.2fr]">
               <div className="col-span-2 sm:col-span-1">
                 <Label htmlFor="rx-cuisine">Cuisine</Label>
                 <Input id="rx-cuisine" list="rx-cuisines" value={cuisine} onChange={event => setCuisine(event.target.value)} />

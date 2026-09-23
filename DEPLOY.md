@@ -150,7 +150,8 @@ limits. Deployed-browser evidence is still required separately.
 
 Explore reads one shared catalog: the curated dishes seeded in D1, a weekly
 mirror of TheMealDB, and any Spoonacular results cached from online searches.
-The hourly cron (`scheduled` in `workers/api/index.ts`) runs the Open Food Facts
+The hourly cron (`scheduled` in `workers/api/index.ts`, configured for staging and
+production at minute 17 UTC) runs the Open Food Facts
 refresh and then the TheMealDB mirror (`workers/api/mealdb-job.ts`, job name
 `themealdb` in `catalog_jobs`). The mirror fetches the 26 `search.php?f=<letter>`
 pages, upserts about 300 recipes with photos into `recipe_catalog`, and repeats
@@ -225,7 +226,9 @@ and on 2026-09-21 the owner confirmed on the production domain that the sign-up
 verification email arrived and a password-reset link was delivered and worked. Physical-device and native-distribution gates
 remain separate from the web cutover.
 
-The production cron is hourly at minute 17 UTC. Each run refreshes a bounded batch
+Staging and production run the cron hourly at minute 17 UTC (staging gained the
+trigger on 2026-09-23 so a mirror can be checked there before a production
+release). Each run refreshes a bounded batch
 of up to 100 stale Open Food Facts rows; `catalog_jobs` records status and counts.
 Check `last_started_at`, `last_finished_at`, `last_status`, `requested`, `updated`,
 and `missing`, plus the sanitized `catalog_refresh` log event. A scheduled trigger

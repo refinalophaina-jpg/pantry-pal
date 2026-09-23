@@ -54,4 +54,16 @@ describe('recipe catalog index', () => {
     const jobs = (await env.DB.prepare('SELECT name FROM catalog_jobs ORDER BY name').all<{ name: string }>()).results.map(row => row.name);
     expect(jobs).toEqual(['openfoodfacts', 'themealdb']);
   });
+  it('reports scheduled job status without exposing the lease token', async () => {
+    await env.DB.prepare("UPDATE catalog_jobs SET last_status='ok',last_started_at='2026-09-23T03:17:00.000Z',last_finished_at='2026-09-23T03:17:09.000Z',requested=790,updated=790,missing=0,lease_until=0,lease_token='secret-token' WHERE name='themealdb'").run();
+    await env.DB.prepare("UPDATE catalog_jobs SET last_status='running',lease_until=? WHERE name='openfoodfacts'").bind(Math.floor(Date.now() / 1000) + 600).run();
+    const { status, body } = await get('/api/catalog/jobs');
+    expect(status).toBe(200);
+    expect(body.data).toEqual([
+      { name: 'openfoodfacts', status: 'running', startedAt: null, finishedAt: null, requested: 0, updated: 0, missing: 0, leased: true },
+      { name: 'themealdb', status: 'ok', startedAt: '2026-09-23T03:17:00.000Z', finishedAt: '2026-09-23T03:17:09.000Z', requested: 790, updated: 790, missing: 0, leased: false },
+    ]);
+    expect(JSON.stringify(body)).not.toContain('secret-token');
+    await env.DB.prepare("UPDATE catalog_jobs SET last_status=NULL,lease_until=0,lease_token=NULL,requested=0,updated=0,last_started_at=NULL,last_finished_at=NULL").run();
+  });
 });

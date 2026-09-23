@@ -27,6 +27,20 @@ async function recipeIndex(env: Env) {
   });
   return json({data,count:data.length});
 }
+/**
+ * Status of the scheduled catalog jobs (Open Food Facts refresh, TheMealDB
+ * mirror) so a deployment's cron can be checked from a signed-in client
+ * without database access. The lease token never leaves the Worker.
+ */
+async function catalogJobs(env: Env) {
+  const now=Math.floor(Date.now()/1000);
+  const result=await env.DB.prepare('SELECT name,last_status,last_started_at,last_finished_at,requested,updated,missing,lease_until FROM catalog_jobs ORDER BY name').all<Row>();
+  const data=result.results.map(row=>({
+    name:row.name, status:row.last_status ?? null, startedAt:row.last_started_at ?? null, finishedAt:row.last_finished_at ?? null,
+    requested:Number(row.requested ?? 0), updated:Number(row.updated ?? 0), missing:Number(row.missing ?? 0), leased:Number(row.lease_until ?? 0)>now,
+  }));
+  return json({data});
+}
 export async function handleCatalog(request: Request, env: Env): Promise<Response|null> {
   const url=new URL(request.url);
   if (url.pathname !== '/api/nutrition' && !url.pathname.startsWith('/api/catalog/')) return null;
@@ -37,6 +51,7 @@ export async function handleCatalog(request: Request, env: Env): Promise<Respons
     return json({data:row});
   }
   if (url.pathname === '/api/catalog/recipes/index') return recipeIndex(env);
+  if (url.pathname === '/api/catalog/jobs') return catalogJobs(env);
   const collection=url.pathname.split('/')[3];
   if (!['ingredients','foods','recipes','techniques'].includes(collection)) return null;
   const table=collection === 'recipes' ? 'recipe_catalog' : collection;

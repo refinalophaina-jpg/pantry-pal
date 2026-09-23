@@ -7,23 +7,42 @@ import { Card, Input, Skeleton } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { cn } from "@/lib/utils";
 
-/** Render a guide body: preserve line breaks and **bold** spans. */
-function GuideBody({ text }: { text: string }) {
+/** Render a guide body: numbered steps, **bold** spans, and a sources line with live links. */
+function Inline({ text }: { text: string }) {
   return (
-    <div className="space-y-1.5 text-sm text-[var(--text-muted)] leading-relaxed">
-      {text.split("\n").map((line, i) => (
-        <p key={i}>
-          {line.split(/(\*\*[^*]+\*\*)/g).map((part, j) =>
-            part.startsWith("**") && part.endsWith("**") ? (
-              <strong key={j} className="text-[var(--text)] font-medium">
-                {part.slice(2, -2)}
-              </strong>
-            ) : (
-              part
-            ),
-          )}
-        </p>
-      ))}
+    <>
+      {text.split(/(\*\*[^*]+\*\*|https?:\/\/\S+)/g).map((part, j) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={j} className="font-medium text-[var(--text)]">{part.slice(2, -2)}</strong>
+        ) : /^https?:\/\//.test(part) ? (
+          <a key={j} href={part.replace(/[.;,]+$/, "")} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">{new URL(part.replace(/[.;,]+$/, "")).hostname}</a>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+function GuideBody({ text }: { text: string }) {
+  const lines = text.split("\n").filter(Boolean);
+  const steps = lines.filter((line) => /^\d+[.)]\s/.test(line));
+  const notes = lines.filter((line) => !/^\d+[.)]\s/.test(line) && !/^sources?:/i.test(line));
+  const sources = lines.find((line) => /^sources?:/i.test(line));
+  return (
+    <div className="space-y-3 text-sm leading-relaxed">
+      {steps.length > 0 && (
+        <ol className="space-y-1.5">
+          {steps.map((line, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--bg)] text-xs font-medium tabular-nums text-[var(--text-muted)]">{i + 1}</span>
+              <span><Inline text={line.replace(/^\d+[.)]\s*/, "")} /></span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {notes.map((line, i) => <p key={i} className="text-[var(--text-muted)]"><Inline text={line} /></p>)}
+      {sources && <p className="text-xs text-[var(--text-faint)]"><Inline text={sources} /></p>}
     </div>
   );
 }
@@ -78,7 +97,7 @@ export default function LearnPage() {
     <div>
       <PageHeader
         title="Learn"
-        subtitle="Cooking techniques, step by step."
+        subtitle="Short technique guides: the steps that matter, the temperature that keeps you safe, and where each one comes from."
       />
 
       <div className="relative mb-6 max-w-md">

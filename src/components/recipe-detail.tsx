@@ -4,18 +4,20 @@ import { useEffect, useState, useRef, useId } from "react";
 import {
   Bookmark,
   BookmarkCheck,
+  CalendarPlus,
   ChefHat,
   Clock,
   ExternalLink,
   Flame,
   Globe2,
+  Pencil,
   PlayCircle,
   Users,
   X,
   Plus,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
+import { format, addDays } from "date-fns";
 import { FoodVisual } from "./food-visual";
 import { prepNotes } from "@/lib/prep-recipes";
 import type { Recipe } from "@/lib/types";
@@ -23,8 +25,10 @@ import { useAppStore, availableQuantity } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import { estimateRecipeNutrition, type RecipeNutrition } from "@/lib/nutrition";
 import { useToast } from "@/components/toast";
-import { Button } from "@/components/ui";
+import { Button, Input, Label, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
+
+const MEALS = ["breakfast", "lunch", "dinner", "snack"] as const;
 
 /** Tidy a scaled quantity: round to 2 dp and drop trailing zeros (1.5, 2, 0.33). */
 function fmtQty(n: number): string {
@@ -35,19 +39,30 @@ export function RecipeDetail({
   recipe,
   onClose,
   onCook,
+  onEdit,
+  note,
 }: {
   recipe: Recipe;
   onClose: () => void;
   onCook?: (recipe: Recipe) => void;
+  /** Opens the editor for a saved recipe, or a copy of any other. */
+  onEdit?: (recipe: Recipe) => void;
+  /** A short line from whoever suggested this recipe, e.g. why the planner picked it. */
+  note?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => { const previous = document.activeElement as HTMLElement | null; if (dialog.current?.showModal) dialog.current.showModal(); else dialog.current?.setAttribute("open", ""); return () => { if(previous?.isConnected) previous.focus(); }; }, []);
   const pantry = useAppStore((s) => s.pantry);
   const savedRecipes = useAppStore((s) => s.savedRecipes);
-  const { saveRecipe, unsaveRecipe, generateFromRecipe } = useSyncedActions();
+  const { saveRecipe, unsaveRecipe, generateFromRecipe, ensureSavedRecipe, addMealPlan } = useSyncedActions();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  const [planning, setPlanning] = useState(false);
+  const [planDate, setPlanDate] = useState(() => format(addDays(new Date(), 1), "yyyy-MM-dd"));
+  const [planMeal, setPlanMeal] = useState<(typeof MEALS)[number]>("dinner");
+  const drafted = recipe.tags.includes("drafted");
+  const viaSpoonacular = /^sp-\d+$/.test(recipe.externalId ?? "") || /^cat-sp-\d+$/.test(recipe.id);
   const [nutrition, setNutrition] = useState<RecipeNutrition | null>(null);
 
   // Live recipe scaling: adjust servings and ingredient amounts scale with it.
@@ -122,6 +137,20 @@ export function RecipeDetail({
     setBusy(false);
   }
 
+  async function addToPlan() {
+    if (!planDate) { toast("Choose a date.", "warn"); return; }
+    setBusy(true);
+    try {
+      const recipeId = await ensureSavedRecipe(recipe);
+      await addMealPlan({ date: planDate, meal: planMeal, recipeId });
+      toast(`${recipe.name} planned for ${planMeal} on ${format(new Date(`${planDate}T12:00:00`), "EEE d MMM")}.`);
+      setPlanning(false);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not add to the plan.", "warn");
+    }
+    setBusy(false);
+  }
+
   async function addMissing() {
     setBusy(true);
     try {
@@ -148,7 +177,7 @@ export function RecipeDetail({
         </button>
 
         <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} />
-        <div className="px-6 pt-5"><h2 id={titleId} className="font-display pr-10 text-2xl">{recipe.name}</h2><p className="text-sm text-[var(--text-muted)] mt-2">{recipe.description}</p></div>
+        <div className="px-6 pt-5"><h2 id={titleId} className="font-display pr-10 text-2xl">{recipe.name}</h2><p className="text-sm text-[var(--text-muted)] mt-2">{recipe.description}</p>{note && <p className="mt-2 text-sm text-[var(--text)]">{note}</p>}</div>
 
         <div className="p-6 sm:p-8">
 
@@ -239,9 +268,17 @@ export function RecipeDetail({
             <Button variant="secondary" onClick={addMissing} disabled={busy}>
               <Plus className="size-4" /> Add missing to list
             </Button>
+            <Button variant="secondary" onClick={() => setPlanning((value) => !value)} disabled={busy} aria-expanded={planning}>
+              <CalendarPlus className="size-4" /> Plan
+            </Button>
             {onCook && (
               <Button variant="secondary" onClick={() => onCook({ ...recipe, servings, ingredients: recipe.ingredients.map((ing) => ({ ...ing, quantity: ing.quantity * scale })) })}>
                 <ChefHat className="size-4" /> Cook now
+              </Button>
+            )}
+            {onEdit && (
+              <Button variant="secondary" onClick={() => onEdit(recipe)} disabled={busy}>
+                <Pencil className="size-4" /> {recipe.savedId ? "Edit" : "Copy & edit"}
               </Button>
             )}
             {recipe.video && (
@@ -266,6 +303,23 @@ export function RecipeDetail({
             )}
           </div>
 
+          {planning && (
+            <form className="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-[var(--border)] p-3" onSubmit={(e) => { e.preventDefault(); void addToPlan(); }}>
+              <div>
+                <Label htmlFor={`${titleId}-date`}>Date</Label>
+                <Input id={`${titleId}-date`} type="date" value={planDate} onChange={(e) => setPlanDate(e.target.value)} className="w-44" />
+              </div>
+              <div>
+                <Label htmlFor={`${titleId}-meal`}>Meal</Label>
+                <Select id={`${titleId}-meal`} value={planMeal} onChange={(e) => setPlanMeal(e.target.value as (typeof MEALS)[number])} className="w-36 capitalize">
+                  {MEALS.map((meal) => <option key={meal} value={meal}>{meal}</option>)}
+                </Select>
+              </div>
+              <Button type="submit" disabled={busy}>Add to plan</Button>
+            </form>
+          )}
+          {drafted && <p className="mb-4 text-sm text-[var(--text-muted)]">Drafted by the assistant from your pantry. Check quantities and cooking times before you rely on them; save it to keep or edit it.</p>}
+          {viaSpoonacular && <p className="mb-4 text-xs text-[var(--text-muted)]">Recipe via Spoonacular. Open Source for the original method and measures.</p>}
           <nav aria-label="Recipe connections" className="mb-6 flex flex-wrap gap-4 text-sm text-[var(--text-muted)] underline-offset-4">
             <Link href="/shopping/" onClick={onClose} className="inline-flex min-h-11 items-center hover:text-[var(--text)] hover:underline">Open shopping list</Link>
             <Link href="/pantry/" onClick={onClose} className="inline-flex min-h-11 items-center hover:text-[var(--text)] hover:underline">Check pantry</Link>

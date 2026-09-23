@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { FoodVisual } from "@/components/food-visual";
-import { Compass, Filter } from "lucide-react";
+import { Compass, Filter, Plus } from "lucide-react";
 import { matchRecipeAgainstPantry, useAppStore } from "@/lib/store";
 import { useSyncedActions } from "@/lib/data-sync";
 import Link from "next/link";
-import { Button, EmptyState, Input, Segmented } from "@/components/ui";
+import { Button, Chip, EmptyState, Input, Segmented } from "@/components/ui";
 import { PageHeader } from "@/components/page-header";
 import { CookMode } from "@/components/cook-mode";
+import { RecipeDetail } from "@/components/recipe-detail";
+import { RecipeEditor, type EditorMode } from "@/components/recipe-editor";
 import { useAction } from "@/lib/use-action";
-import { cn } from "@/lib/utils";
 import type { Recipe } from "@/lib/types";
 
 const EQUIPMENT_OPTS = ["pan", "pot", "oven", "wok"];
@@ -24,25 +25,19 @@ const SUBSTITUTIONS: Record<string, string[]> = {
   spaghetti: ["linguine", "fettuccine", "rice noodles"],
 };
 
-const chipClass = (active: boolean) =>
-  cn(
-    "min-h-9 cursor-pointer rounded-full border px-3 text-sm transition-colors",
-    active
-      ? "border-[var(--text)] bg-[var(--text)] text-[var(--surface)]"
-      : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-muted)] hover:text-[var(--text)]",
-  );
-
 export default function RecipesPage() {
   const builtins = useAppStore((s) => s.recipes);
   const saved = useAppStore((s) => s.savedRecipes);
   const pantry = useAppStore((s) => s.pantry);
   const equipment = useAppStore((s) => s.equipment);
-  const { toggleEquipment, generateFromRecipe } = useSyncedActions();
+  const { toggleEquipment, generateFromRecipe, unsaveRecipe } = useSyncedActions();
 
   const [q, setQ] = useState("");
   const [tag, setTag] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [cooking, setCooking] = useState<Recipe | null>(null);
+  const [open, setOpen] = useState<Recipe | null>(null);
+  const [editor, setEditor] = useState<EditorMode | null>(null);
   const [scope, setScope] = useState<"all" | "saved">("all");
   const run = useAction();
 
@@ -59,7 +54,7 @@ export default function RecipesPage() {
   const ranked = useMemo(() => {
     return recipes
       .map((r) => ({ r, m: matchRecipeAgainstPantry(r, pantry, equipment) }))
-      .filter(({ r }) => !q || r.name.toLowerCase().includes(q.toLowerCase()))
+      .filter(({ r }) => !q || r.name.toLowerCase().includes(q.toLowerCase()) || r.cuisine.toLowerCase().includes(q.toLowerCase()))
       .filter(({ r }) => !tag || r.tags.includes(tag))
       .sort((a, b) => b.m.score - a.m.score);
   }, [recipes, pantry, equipment, q, tag]);
@@ -71,21 +66,27 @@ export default function RecipesPage() {
   }, [recipes]);
 
   const filtersActive = tag !== null || equipment.length > 0;
+  const openEditor = (recipe: Recipe) => setEditor(recipe.savedId ? { kind: "edit", recipe } : { kind: "copy", recipe });
 
   return (
     <div>
       <PageHeader
         title="Recipes"
-        subtitle="Ranked by how much of each recipe you already have."
+        subtitle="Your own recipes and the kitchen's, ranked by how much of each you already have."
         actions={
-          <Button
-            variant="secondary"
-            size="sm"
-            aria-expanded={showFilters}
-            onClick={() => setShowFilters((v) => !v)}
-          >
-            <Filter className="size-4" /> Filters{filtersActive ? " · on" : ""}
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-expanded={showFilters}
+              onClick={() => setShowFilters((v) => !v)}
+            >
+              <Filter className="size-4" /> Filters{filtersActive ? " · on" : ""}
+            </Button>
+            <Button size="sm" onClick={() => setEditor({ kind: "new" })}>
+              <Plus className="size-4" /> New recipe
+            </Button>
+          </>
         }
       />
 
@@ -113,27 +114,16 @@ export default function RecipesPage() {
           <div>
             <p className="mb-2 text-sm text-[var(--text-muted)]">Equipment you have</p>
             <div className="flex flex-wrap gap-2">
-              {EQUIPMENT_OPTS.map((e) => {
-                const active = equipment.some((eq) => eq.name === e);
-                return (
-                  <button key={e} type="button" aria-pressed={active} className={chipClass(active)} onClick={() => toggleEquipment(e)}>
-                    {e}
-                  </button>
-                );
-              })}
+              {EQUIPMENT_OPTS.map((e) => (
+                <Chip key={e} active={equipment.some((eq) => eq.name === e)} onClick={() => toggleEquipment(e)}>{e}</Chip>
+              ))}
             </div>
           </div>
           <div>
             <p className="mb-2 text-sm text-[var(--text-muted)]">Tags</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" aria-pressed={tag === null} className={chipClass(tag === null)} onClick={() => setTag(null)}>
-                All
-              </button>
-              {allTags.map((t) => (
-                <button key={t} type="button" aria-pressed={tag === t} className={chipClass(tag === t)} onClick={() => setTag(t)}>
-                  {t}
-                </button>
-              ))}
+              <Chip active={tag === null} onClick={() => setTag(null)}>All</Chip>
+              {allTags.map((t) => <Chip key={t} active={tag === t} onClick={() => setTag(t)}>{t}</Chip>)}
             </div>
           </div>
         </div>
@@ -150,13 +140,18 @@ export default function RecipesPage() {
           }
           description={
             scope === "saved"
-              ? "Browse Explore and tap the bookmark to save recipes here."
+              ? "Save a dish from Explore, write your own, or copy one of the kitchen's to edit."
               : q || tag
                 ? "Try a different search, or clear the filters."
                 : "Discover dishes from around the world in Explore."
           }
           action={
-            scope === "saved" || (!q && !tag) ? (
+            scope === "saved" ? (
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button onClick={() => setEditor({ kind: "new" })}><Plus className="size-4" /> New recipe</Button>
+                <Link href="/explore"><Button variant="secondary"><Compass className="size-4" /> Explore recipes</Button></Link>
+              </div>
+            ) : !q && !tag ? (
               <Link href="/explore">
                 <Button>
                   <Compass className="size-4" /> Explore recipes
@@ -183,14 +178,19 @@ export default function RecipesPage() {
                 })
               }
               onCook={() => setCooking(r)}
+              onOpen={() => setOpen(r)}
+              onEdit={() => openEditor(r)}
+              onDelete={r.savedId ? () => run(() => unsaveRecipe(r.savedId!), { success: `${r.name} removed from My Recipes.`, error: "Couldn't remove the recipe — try again." }) : undefined}
             />
           ))}
         </div>
       )}
 
+      {open && <RecipeDetail key={open.id} recipe={open} onClose={() => setOpen(null)} onCook={(recipe) => { setOpen(null); setCooking(recipe); }} onEdit={(recipe) => { setOpen(null); openEditor(recipe); }} />}
       {cooking && (
         <CookMode recipe={cooking} onClose={() => setCooking(null)} />
       )}
+      <RecipeEditor mode={editor} onClose={() => setEditor(null)} />
     </div>
   );
 }
@@ -204,6 +204,9 @@ function RecipeCard({
   pantry,
   onAddMissing,
   onCook,
+  onOpen,
+  onEdit,
+  onDelete,
 }: {
   recipe: Recipe;
   have: number;
@@ -213,14 +216,18 @@ function RecipeCard({
   pantry: ReturnType<typeof useAppStore.getState>["pantry"];
   onAddMissing: () => void;
   onCook: () => void;
+  onOpen: () => void;
+  onEdit: () => void;
+  onDelete?: () => Promise<boolean>;
 }) {
-  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   return (
     <article id={recipe.id} className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <FoodVisual name={recipe.name} imageUrl={recipe.imageUrl} compact />
         <div className="min-w-0 flex-1">
-          <h2 className="font-medium leading-snug">{recipe.name}</h2>
+          <h2 className="font-medium leading-snug"><button type="button" onClick={onOpen} className="cursor-pointer text-left hover:text-[var(--accent-hover)]">{recipe.name}</button></h2>
           <p className="mt-0.5 text-sm text-[var(--text-muted)]">{recipe.description}</p>
         </div>
         {canCook ? (
@@ -232,6 +239,7 @@ function RecipeCard({
 
       <p className="mt-3 text-sm text-[var(--text-muted)]">
         {recipe.minutes} min · <span className="capitalize">{recipe.difficulty}</span> · {recipe.servings} servings
+        {recipe.cuisine && recipe.cuisine !== "International" && recipe.cuisine !== "Custom" && <> · {recipe.cuisine}</>}
         {recipe.equipment.length > 0 && <> · needs {recipe.equipment.join(", ")}</>}
         {!equipmentOk && <span className="text-[var(--warn)]"> · missing equipment</span>}
         {recipe.tags.length > 0 && <span className="block text-[var(--text-faint)]">{recipe.tags.join(" · ")}</span>}
@@ -247,17 +255,26 @@ function RecipeCard({
             Add missing to list
           </Button>
         )}
-        <Button variant="secondary" size="sm" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-          {open ? "Hide" : "View"} recipe
+        <Button variant="secondary" size="sm" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "Hide" : "View"} recipe
         </Button>
+        <Button variant="ghost" size="sm" onClick={onEdit}>{recipe.savedId ? "Edit" : "Copy & edit"}</Button>
+        {onDelete && !confirming && <Button variant="ghost" size="sm" onClick={() => setConfirming(true)} className="text-[var(--danger)] hover:text-[var(--danger)]">Delete</Button>}
+        {onDelete && confirming && (
+          <span className="inline-flex items-center gap-1 text-sm">
+            <span className="text-[var(--text-muted)]">Delete this recipe?</span>
+            <Button variant="danger" size="sm" onClick={() => { void onDelete().then((ok) => { if (!ok) setConfirming(false); }); }}>Delete</Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>Keep</Button>
+          </span>
+        )}
       </div>
 
-      {open && (
+      {expanded && (
         <div className="mt-4 space-y-4 border-t border-[var(--border)] pt-4">
           <div>
             <h3 className="mb-2 text-sm font-medium">Ingredients</h3>
             <ul className="space-y-1.5 text-sm">
-              {recipe.ingredients.map((ing) => {
+              {recipe.ingredients.map((ing, index) => {
                 const owned = pantry.find(
                   (p) => p.name.toLowerCase() === ing.name.toLowerCase(),
                 );
@@ -265,7 +282,7 @@ function RecipeCard({
                 const subs = SUBSTITUTIONS[ing.name.toLowerCase()];
                 return (
                   <li
-                    key={ing.name}
+                    key={`${ing.name}-${index}`}
                     className="flex items-center justify-between gap-3"
                   >
                     <span>

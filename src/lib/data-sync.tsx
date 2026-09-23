@@ -126,6 +126,7 @@ export function useSyncedActions() {
       store.generateFromRecipe(recipe, ctx, servings),
     moveShoppingToPantry: (id: string) => store.moveShoppingToPantry(id, ctx),
     planPrep: (recipes: Recipe[], start: string, people: number) => store.planPrep(recipes, start, people, ctx),
+    planBatch: (assignments: Parameters<typeof store.planBatch>[0], start: string, people: number) => store.planBatch(assignments, start, people, ctx),
     buildWeekList: (dates: string[]) => store.buildWeekList(dates, ctx),
     addMealPlan: (entry: Parameters<typeof store.addMealPlan>[0]) =>
       store.addMealPlan(entry, ctx),
@@ -134,13 +135,12 @@ export function useSyncedActions() {
       id: string,
       target: Parameters<typeof store.moveMealPlan>[1],
     ) => store.moveMealPlan(id, target, ctx),
-    generateMealPlan: (opts: {
-      dates: string[];
-      meals: string[];
-      preferences: string;
-    }) => store.generateMealPlan(opts, ctx),
+    generateMealPlan: (opts: Parameters<typeof store.generateMealPlan>[0]) => store.generateMealPlan(opts, ctx),
+    commitMealPlan: (entries: Parameters<typeof store.commitMealPlan>[0]) => store.commitMealPlan(entries, ctx),
     saveRecipe: (recipe: Parameters<typeof store.saveRecipe>[0]) =>
       store.saveRecipe(recipe, ctx),
+    updateSavedRecipe: (savedId: string, patch: Partial<Recipe>) => store.updateSavedRecipe(savedId, patch, ctx),
+    ensureSavedRecipe: (recipe: Recipe) => store.ensureSavedRecipe(recipe, ctx),
     unsaveRecipe: (savedId: string) => store.unsaveRecipe(savedId, ctx),
     toggleEquipment: store.toggleEquipment,
   };

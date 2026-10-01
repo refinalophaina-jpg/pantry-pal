@@ -28,7 +28,7 @@
   "dependencies": {
     "@zxing/browser": "^0.2.0",
     "@zxing/library": "^0.22.0",
-    "better-auth": "^1.7.5",
+    "better-auth": "^1.7.6",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.16.0",
@@ -44,7 +44,7 @@
     "@capacitor/cli": "^8.5.2",
     "@capacitor/core": "^8.3.4",
     "@capacitor/ios": "^8.5.2",
-    "@cloudflare/workers-types": "^5.20260920.1",
+    "@cloudflare/workers-types": "^5.20260928.1",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@tauri-apps/cli": "^2.11.4",
@@ -63,7 +63,7 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.1",
-    "wrangler": "^4.135.0"
+    "wrangler": "^4.142.0"
   },
   "engines": {
     "node": ">=24"

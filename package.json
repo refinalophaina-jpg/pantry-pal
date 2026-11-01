@@ -40,14 +40,14 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@capacitor/android": "^8.5.2",
-    "@capacitor/cli": "^8.5.2",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/cli": "^8.6.0",
     "@capacitor/core": "^8.3.4",
-    "@capacitor/ios": "^8.5.2",
+    "@capacitor/ios": "^8.6.0",
     "@cloudflare/workers-types": "^5.20260920.1",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
-    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/cli": "^2.12.4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
